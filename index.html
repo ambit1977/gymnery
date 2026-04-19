@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0a0e17">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="旭町南地区区民館トレーニング室のワークアウト記録アプリ">
+  <title>トレーニング記録 - 旭町南地区区民館</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <!-- Header -->
+    <header class="header" id="header">
+      <div class="header-content">
+        <div>
+          <div class="header-title" id="header-title">トレーニング記録</div>
+          <div class="header-subtitle" id="header-subtitle">旭町南地区区民館</div>
+        </div>
+        <div class="header-actions" id="header-actions"></div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content"></main>
+  </div>
+
+  <!-- Bottom Navigation -->
+  <nav class="bottom-nav" id="bottom-nav">
+    <div class="bottom-nav-inner">
+      <button class="nav-item active" data-page="home" id="nav-home">
+        <span class="nav-icon">🏠</span>
+        <span>ホーム</span>
+      </button>
+      <button class="nav-item" data-page="history" id="nav-history">
+        <span class="nav-icon">📅</span>
+        <span>履歴</span>
+      </button>
+      <button class="nav-item" data-page="stats" id="nav-stats">
+        <span class="nav-icon">📊</span>
+        <span>統計</span>
+      </button>
+      <button class="nav-item" data-page="body" id="nav-body">
+        <span class="nav-icon">⚖️</span>
+        <span>体組成</span>
+      </button>
+      <button class="nav-item" data-page="settings" id="nav-settings">
+        <span class="nav-icon">⚙️</span>
+        <span>設定</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Toast container -->
+  <div id="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/dexie@3/dist/dexie.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+  <script src="machines.js"></script>
+  <script src="db.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
