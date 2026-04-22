@@ -5,6 +5,7 @@
 let currentPage = 'home';
 let activeSessionId = null;
 let timerInterval = null;
+let alertedMinutes = new Set();
 let chartInstances = {};
 
 // ========================================
@@ -93,11 +94,26 @@ function clearTimer() {
 
 function startTimer(startTime, el) {
   clearTimer();
+  alertedMinutes.clear();
+  
+  const notifyUser = (min) => {
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
+    showToast(`⏳ まもなく1時間です（残り ${60 - min} 分）`, 'warning');
+  };
+
   const update = () => {
     const diff = Date.now() - new Date(startTime).getTime();
+    const totalMinutes = Math.floor(diff / 60000);
     const h = Math.floor(diff / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
     const s = Math.floor((diff % 60000) / 1000);
+    
+    const minInHour = totalMinutes % 60;
+    if ([55, 57, 59].includes(minInHour) && !alertedMinutes.has(totalMinutes)) {
+      alertedMinutes.add(totalMinutes);
+      notifyUser(minInHour);
+    }
+
     el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
   };
   update();
@@ -121,6 +137,27 @@ async function renderHome(main) {
   if (activeSessionId) {
     const session = await getSession(activeSessionId);
     const exercises = await getExercisesBySession(activeSessionId);
+
+    let exListHtml = '';
+    for (const ex of exercises) {
+      const machine = getMachineById(ex.machineId);
+      const catColor = getCategoryColor(ex.category);
+      let setsHtml = '';
+      if (ex.type === 'strength' && Array.isArray(ex.data)) {
+        ex.data.forEach((s, i) => {
+          setsHtml += `<span class="exercise-set-val">${s.weight || 0}kg × ${s.reps || 0}</span>`;
+        });
+      }
+      exListHtml += `
+        <div class="exercise-item" style="border-left:3px solid ${catColor}; cursor:pointer" onclick="openExerciseInput('${ex.machineId}', ${ex.id})">
+          <div class="exercise-header">
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
+            <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); confirmDeleteExercise(${ex.id},${activeSessionId})" style="color:var(--danger);padding:4px">✕</button>
+          </div>
+          <div class="exercise-sets">${setsHtml}</div>
+        </div>`;
+    }
+
     activeHtml = `
       <div class="card session-active mb-lg" id="active-session-card">
         <div class="flex items-center justify-between mb-md">
@@ -129,7 +166,8 @@ async function renderHome(main) {
         </div>
         <div class="text-xs text-muted mb-md">${formatDateTime(session.startTime)} 開始</div>
         <div class="text-sm mb-md">${exercises.length > 0 ? `${exercises.length}種目 記録済み` : 'まだ記録がありません'}</div>
-        <div class="flex gap-sm">
+        ${exListHtml}
+        <div class="flex gap-sm mt-md">
           <button class="btn btn-primary btn-sm" onclick="showMachineSelect()" style="flex:1">＋ マシン記録</button>
           <button class="btn btn-secondary btn-sm" onclick="confirmEndSession()" style="flex:1">終了</button>
         </div>
@@ -232,7 +270,13 @@ async function doEndSession() {
 // ========================================
 function showMachineSelect() {
   const cats = Object.keys(CATEGORIES);
-  let html = `<div class="modal-handle"></div><div class="modal-title">マシン選択</div>`;
+  let html = `
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-md">
+      <div class="modal-title" style="margin-bottom:0">マシン選択</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
+    </div>
+  `;
   for (const cat of cats) {
     const machines = getMachinesByCategory(cat);
     html += `<div class="category-section">
@@ -259,14 +303,21 @@ function showMachineSelect() {
 // ========================================
 // エクササイズ入力
 // ========================================
-async function openExerciseInput(machineId) {
+async function openExerciseInput(machineId, editExerciseId = null) {
   const machine = getMachineById(machineId);
   closeModal();
   await new Promise(r => setTimeout(r, 300));
 
-  // Get last exercise data for this machine to pre-fill
-  const pastExercises = await getExercisesByMachine(machineId);
-  const lastData = pastExercises.length > 0 ? pastExercises[0].data : null;
+  let lastData = null;
+  if (editExerciseId) {
+    const db = new Dexie('TrainingRoomApp');
+    db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
+    const ex = await db.exercises.get(editExerciseId);
+    if (ex) lastData = ex.data;
+  } else {
+    const pastExercises = await getExercisesByMachine(machineId);
+    lastData = pastExercises.length > 0 ? pastExercises[0].data : null;
+  }
 
   let html = `<div class="modal-handle"></div>
     <div class="modal-title">${getCategoryIcon(machine.category)} ${machine.name}</div>`;
@@ -297,14 +348,14 @@ async function openExerciseInput(machineId) {
     html += `</div>`;
   }
 
-  if (lastData) {
+  if (lastData && !editExerciseId) {
     html += `<div class="text-xs text-muted mt-sm">💡 前回の記録を反映しています</div>`;
   }
 
   html += `
     <div class="flex gap-sm mt-lg">
       <button class="btn btn-secondary" onclick="closeModal();showMachineSelect()" style="flex:1">戻る</button>
-      <button class="btn btn-primary" onclick="saveExercise('${machineId}')" style="flex:1">保存</button>
+      <button class="btn btn-primary" onclick="saveExercise('${machineId}', ${editExerciseId || 'null'})" style="flex:1">${editExerciseId ? '更新' : '保存'}</button>
     </div>`;
 
   showModal(html);
@@ -317,6 +368,22 @@ function renderSetRow(machine, index, data = {}) {
       return `<div class="set-input">
         <input type="text" data-key="${f.key}" value="${val}" placeholder="${f.label}">
         <div class="set-input-label">${f.label}</div>
+      </div>`;
+    }
+    if (f.key === 'weight') {
+      const presets = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+      const isCustom = val && !presets.includes(Number(val));
+      const options = presets.map(p => `<option value="${p}" ${Number(val) === p ? 'selected' : ''}>${p}</option>`).join('');
+      return `<div class="set-input weight-input-group">
+        <div style="display:flex; width:100%">
+          <select onchange="this.nextElementSibling.value=this.value; this.nextElementSibling.style.display=this.value==='custom'?'block':'none'; if(this.value!=='custom'){this.nextElementSibling.dataset.val=this.value;} else {this.nextElementSibling.value=''; this.nextElementSibling.focus();}">
+            <option value="">--</option>
+            ${options}
+            <option value="custom" ${isCustom ? 'selected' : ''}>任意</option>
+          </select>
+          <input type="number" data-key="${f.key}" value="${val}" step="${f.step||1}" min="${f.min||0}" placeholder="0" inputmode="decimal" style="display:${isCustom ? 'block' : 'none'}; width:100%;">
+        </div>
+        <div class="set-input-label">${f.label}${f.unit ? '('+f.unit+')' : ''}</div>
       </div>`;
     }
     return `<div class="set-input">
@@ -361,7 +428,7 @@ function removeSetRow(btn) {
   });
 }
 
-async function saveExercise(machineId) {
+async function saveExercise(machineId, editExerciseId = null) {
   const machine = getMachineById(machineId);
   let data;
 
@@ -384,9 +451,15 @@ async function saveExercise(machineId) {
     });
   }
 
-  await addExercise(activeSessionId, machineId, data);
+  if (editExerciseId) {
+    await updateExercise(editExerciseId, data);
+    showToast(`${machine.name} を更新しました ✅`, 'success');
+  } else {
+    await addExercise(activeSessionId, machineId, data);
+    showToast(`${machine.name} を記録しました ✅`, 'success');
+  }
+
   closeModal();
-  showToast(`${machine.name} を記録しました ✅`, 'success');
   navigateTo('home');
 }
 
@@ -875,11 +948,26 @@ function chartOptions() {
   };
 }
 
-function showBodyInput(existing = null) {
+async function showBodyInput(existing = null) {
   const today = new Date().toISOString().split('T')[0];
+  let defaults = existing;
+  if (!defaults) {
+    defaults = await getLatestBodyComposition() || {};
+  }
+  
+  const stepBtn = (id) => `
+    <div class="stepper-controls">
+      <button type="button" class="btn-stepper" onclick="document.getElementById('${id}').stepDown()">-</button>
+      <button type="button" class="btn-stepper" onclick="document.getElementById('${id}').stepUp()">+</button>
+    </div>
+  `;
+
   showModal(`
     <div class="modal-handle"></div>
-    <div class="modal-title">${existing ? '体組成を編集' : '体組成を記録'}</div>
+    <div class="flex items-center justify-between mb-md">
+      <div class="modal-title" style="margin-bottom:0">${existing ? '体組成を編集' : '体組成を記録'}</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
+    </div>
     <div class="input-group">
       <label class="input-label">日付</label>
       <input class="input" type="date" id="body-date" value="${existing?.date || today}">
@@ -887,31 +975,40 @@ function showBodyInput(existing = null) {
     <div class="input-group">
       <label class="input-label">体重</label>
       <div class="input-with-unit">
-        <input class="input" type="number" id="body-weight" step="0.1" value="${existing?.weight || ''}" placeholder="0.0" inputmode="decimal">
+        <input class="input" type="number" id="body-weight" step="0.1" value="${defaults.weight || ''}" placeholder="0.0" inputmode="decimal">
         <span class="input-unit">kg</span>
+        ${stepBtn('body-weight')}
       </div>
     </div>
     <div class="input-group">
       <label class="input-label">体脂肪率</label>
       <div class="input-with-unit">
-        <input class="input" type="number" id="body-fat" step="0.1" value="${existing?.bodyFat || ''}" placeholder="0.0" inputmode="decimal">
+        <input class="input" type="number" id="body-fat" step="0.1" value="${defaults.bodyFat || ''}" placeholder="0.0" inputmode="decimal">
         <span class="input-unit">%</span>
+        ${stepBtn('body-fat')}
       </div>
     </div>
     <div class="input-group">
       <label class="input-label">筋肉量</label>
       <div class="input-with-unit">
-        <input class="input" type="number" id="body-muscle" step="0.1" value="${existing?.muscleMass || ''}" placeholder="0.0" inputmode="decimal">
+        <input class="input" type="number" id="body-muscle" step="0.1" value="${defaults.muscleMass || ''}" placeholder="0.0" inputmode="decimal">
         <span class="input-unit">kg</span>
+        ${stepBtn('body-muscle')}
       </div>
     </div>
     <div class="input-group">
       <label class="input-label">BMI</label>
-      <input class="input" type="number" id="body-bmi" step="0.1" value="${existing?.bmi || ''}" placeholder="0.0" inputmode="decimal">
+      <div class="input-with-unit">
+        <input class="input" type="number" id="body-bmi" step="0.1" value="${defaults.bmi || ''}" placeholder="0.0" inputmode="decimal">
+        ${stepBtn('body-bmi')}
+      </div>
     </div>
     <div class="input-group">
       <label class="input-label">内臓脂肪レベル</label>
-      <input class="input" type="number" id="body-visceral" step="0.5" value="${existing?.visceralFat || ''}" placeholder="0" inputmode="decimal">
+      <div class="input-with-unit">
+        <input class="input" type="number" id="body-visceral" step="0.5" value="${defaults.visceralFat || ''}" placeholder="0" inputmode="decimal">
+        ${stepBtn('body-visceral')}
+      </div>
     </div>
     <div class="input-group">
       <label class="input-label">メモ</label>
