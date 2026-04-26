@@ -363,7 +363,8 @@ async function openExerciseInput(machineId, editExerciseId = null) {
 
 function renderSetRow(machine, index, data = {}) {
   const fields = machine.fields.map(f => {
-    const val = data[f.key] || '';
+    let val = data[f.key] !== undefined ? data[f.key] : '';
+    if (val === '' && f.key === 'reps') val = 10;
     if (f.type === 'text') {
       return `<div class="set-input">
         <input type="text" data-key="${f.key}" value="${val}" placeholder="${f.label}">
