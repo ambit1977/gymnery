@@ -112,7 +112,7 @@ const MACHINES = [
       { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 0.5, min: 0 },
       { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 0 },
     ],
-    weights: [10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0, 110.0, 120.0, 130.0, 140.0, 150.0, 160.0, 170.0],
+    weights: [8.0, 18.0, 28.0, 38.0, 48.0, 58.0, 68.0, 78.0, 88.0, 98.0, 108.0, 118.0, 128.0, 138.0, 148.0, 158.0, 168.0, 178.0, 188.0, 198.0, 208.0],
     hasSets: true,
   },
   {
@@ -125,6 +125,7 @@ const MACHINES = [
       { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 0.5, min: 0 },
       { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 0 },
     ],
+    weights: [8.0, 18.0, 28.0, 38.0, 48.0, 58.0, 68.0, 78.0, 88.0, 98.0, 108.0, 118.0, 128.0, 138.0, 148.0, 158.0, 168.0, 178.0, 188.0, 198.0, 208.0],
     hasSets: true,
   },
   {
@@ -178,6 +179,7 @@ const MACHINES = [
       { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 0.5, min: 0 },
       { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 0 },
     ],
+    weights: [2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5, 41.5, 44.5],
     hasSets: true,
   },
   {
