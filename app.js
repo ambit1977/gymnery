@@ -372,17 +372,17 @@ function renderSetRow(machine, index, data = {}) {
       </div>`;
     }
     if (f.key === 'weight') {
-      const presets = [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
-      const isCustom = val && !presets.includes(Number(val));
+      const presets = machine.weights || [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100];
+      const isCustom = val !== '' && val !== undefined && !presets.includes(Number(val));
       const options = presets.map(p => `<option value="${p}" ${Number(val) === p ? 'selected' : ''}>${p}</option>`).join('');
       return `<div class="set-input weight-input-group">
-        <div style="display:flex; width:100%">
-          <select onchange="this.nextElementSibling.value=this.value; this.nextElementSibling.style.display=this.value==='custom'?'block':'none'; if(this.value!=='custom'){this.nextElementSibling.dataset.val=this.value;} else {this.nextElementSibling.value=''; this.nextElementSibling.focus();}">
+        <div style="display:flex; flex-direction: column; width:100%">
+          <select class="input" style="display:${isCustom ? 'none' : 'block'}; width:100%; margin-bottom:4px;" onchange="if(this.value==='custom'){this.style.display='none';this.nextElementSibling.style.display='block';this.nextElementSibling.focus();this.nextElementSibling.value='';}else{this.nextElementSibling.value=this.value;}">
             <option value="">--</option>
             ${options}
-            <option value="custom" ${isCustom ? 'selected' : ''}>任意</option>
+            <option value="custom">任意入力...</option>
           </select>
-          <input type="number" data-key="${f.key}" value="${val}" step="${f.step||1}" min="${f.min||0}" placeholder="0" inputmode="decimal" style="display:${isCustom ? 'block' : 'none'}; width:100%;">
+          <input class="input" type="number" data-key="${f.key}" value="${isCustom ? val : (val||'')}" step="${f.step||1}" min="${f.min||0}" placeholder="0" inputmode="decimal" style="display:${isCustom ? 'block' : 'none'}; width:100%;" onblur="if(this.value===''){this.style.display='none';this.previousElementSibling.style.display='block';this.previousElementSibling.value='';}">
         </div>
         <div class="set-input-label">${f.label}${f.unit ? '('+f.unit+')' : ''}</div>
       </div>`;
