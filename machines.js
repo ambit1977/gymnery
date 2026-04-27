@@ -45,6 +45,7 @@ const MACHINES = [
       { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 0.5, min: 0 },
       { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 0 },
     ],
+    weights: [3.5, 6.0, 8.5, 11.0, 13.5, 16.0, 18.5, 21.0, 23.5, 28.5, 33.5, 38.5, 43.5, 48.5, 53.5, 58.5, 63.5, 68.5, 73.5, 78.5, 83.5],
     hasSets: true,
   },
   {
