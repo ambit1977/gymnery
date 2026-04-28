@@ -741,14 +741,148 @@ textarea.input {
   100% { opacity: 1; }
 }
 
-.session-timer {
-  font-size: 1.5rem;
+/* --- Timer block --- */
+.timer-block {
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin-bottom: var(--space-md);
+  text-align: center;
+}
+
+.timer-remain-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 2px;
+}
+
+.timer-remain {
+  font-size: 2.8rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+  margin-bottom: var(--space-sm);
+  transition: color 0.3s ease;
+}
+
+.timer-remain.timer-safe {
   background: linear-gradient(135deg, var(--accent), #4ecdc4);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+}
+
+.timer-remain.timer-warning {
+  background: linear-gradient(135deg, #ffb347, #ff6723);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.timer-remain.timer-danger {
+  background: linear-gradient(135deg, #ff6b6b, #ff2d2d);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: timerPulse 1s ease-in-out infinite;
+}
+
+.timer-remain.timer-overtime {
+  background: linear-gradient(135deg, #ff2d2d, #cc0000);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: timerPulse 0.6s ease-in-out infinite;
+}
+
+@keyframes timerPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Timer progress bar */
+.timer-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+}
+
+.timer-progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 1s linear, background 0.5s ease;
+}
+
+.timer-progress-fill.timer-safe {
+  background: linear-gradient(90deg, var(--accent), #4ecdc4);
+}
+
+.timer-progress-fill.timer-warning {
+  background: linear-gradient(90deg, #ffb347, #ff6723);
+}
+
+.timer-progress-fill.timer-danger {
+  background: linear-gradient(90deg, #ff6b6b, #ff2d2d);
+}
+
+.timer-progress-fill.timer-overtime {
+  background: linear-gradient(90deg, #ff2d2d, #cc0000);
+  width: 100% !important;
+}
+
+/* Timer meta (start time + adjust buttons) */
+.timer-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.timer-start-adjust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+}
+
+.timer-start-time {
+  font-weight: 700;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn-timer-adj {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-timer-adj:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.btn-timer-adj:active {
+  transform: scale(0.95);
+}
+
+.timer-elapsed {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
 }
 
 /* --- History list --- */

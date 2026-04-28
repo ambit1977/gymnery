@@ -92,32 +92,83 @@ function clearTimer() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
 }
 
-function startTimer(startTime, el) {
+function startTimer(startTime, timerContainer) {
   clearTimer();
   alertedMinutes.clear();
-  
-  const notifyUser = (min) => {
+  const SESSION_DURATION = 60 * 60 * 1000; // 1時間
+
+  const notifyUser = (remainMin) => {
     if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
-    showToast(`⏳ まもなく1時間です（残り ${60 - min} 分）`, 'warning');
+    showToast(`⏳ まもなく1時間です（残り ${remainMin} 分）`, 'warning');
   };
 
   const update = () => {
     const diff = Date.now() - new Date(startTime).getTime();
     const totalMinutes = Math.floor(diff / 60000);
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    const s = Math.floor((diff % 60000) / 1000);
-    
+    const remain = SESSION_DURATION - diff;
+    const isOvertime = remain <= 0;
+
+    // Elapsed time
+    const eH = Math.floor(diff / 3600000);
+    const eM = Math.floor((diff % 3600000) / 60000);
+    const eS = Math.floor((diff % 60000) / 1000);
+    const elapsedStr = `${String(eH).padStart(2,'0')}:${String(eM).padStart(2,'0')}:${String(eS).padStart(2,'0')}`;
+
+    // Remaining time
+    const absRemain = Math.abs(remain);
+    const rM = Math.floor(absRemain / 60000);
+    const rS = Math.floor((absRemain % 60000) / 1000);
+    const remainStr = `${isOvertime ? '-' : ''}${String(rM).padStart(2,'0')}:${String(rS).padStart(2,'0')}`;
+
+    // Progress percentage (capped at 100)
+    const progress = Math.min(diff / SESSION_DURATION * 100, 100);
+
+    // Urgency class
+    let urgencyClass = 'timer-safe';
+    if (isOvertime) urgencyClass = 'timer-overtime';
+    else if (remain <= 3 * 60 * 1000) urgencyClass = 'timer-danger';
+    else if (remain <= 5 * 60 * 1000) urgencyClass = 'timer-warning';
+
+    // Alert at 5, 3, 1 minute(s) remaining
     const minInHour = totalMinutes % 60;
     if ([55, 57, 59].includes(minInHour) && !alertedMinutes.has(totalMinutes)) {
       alertedMinutes.add(totalMinutes);
-      notifyUser(minInHour);
+      notifyUser(60 - minInHour);
     }
 
-    el.textContent = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    // Update the timer container
+    const remainEl = timerContainer.querySelector('.timer-remain');
+    const sessionCard = timerContainer.closest('.session-active') || timerContainer.parentElement;
+    const elapsedEl = sessionCard ? sessionCard.querySelector('.timer-elapsed') : null;
+    const progressBar = timerContainer.querySelector('.timer-progress-fill');
+    const startTimeEl = timerContainer.querySelector('.timer-start-time');
+
+    if (remainEl) {
+      remainEl.textContent = remainStr;
+      remainEl.className = `timer-remain ${urgencyClass}`;
+    }
+    if (elapsedEl) elapsedEl.textContent = elapsedStr;
+    if (progressBar) {
+      progressBar.style.width = `${progress}%`;
+      progressBar.className = `timer-progress-fill ${urgencyClass}`;
+    }
+    if (startTimeEl) {
+      startTimeEl.textContent = formatTime(startTime);
+    }
   };
   update();
   timerInterval = setInterval(update, 1000);
+}
+
+async function adjustStartTime(deltaMinutes) {
+  if (!activeSessionId) return;
+  const session = await getSession(activeSessionId);
+  if (!session) return;
+  const current = new Date(session.startTime);
+  current.setMinutes(current.getMinutes() + deltaMinutes);
+  await db.sessions.update(activeSessionId, { startTime: current.toISOString() });
+  // Re-render home to pick up the new start time
+  navigateTo('home');
 }
 
 function destroyCharts() {
@@ -160,11 +211,22 @@ async function renderHome(main) {
 
     activeHtml = `
       <div class="card session-active mb-lg" id="active-session-card">
-        <div class="flex items-center justify-between mb-md">
+        <div class="flex items-center justify-between mb-sm">
           <span class="text-sm font-bold">🟢 トレーニング中</span>
-          <span class="session-timer" id="session-timer">00:00:00</span>
+          <span class="text-xs text-muted">経過 <span class="timer-elapsed">00:00:00</span></span>
         </div>
-        <div class="text-xs text-muted mb-md">${formatDateTime(session.startTime)} 開始</div>
+        <div class="timer-block" id="session-timer">
+          <div class="timer-remain-label">残り時間</div>
+          <div class="timer-remain timer-safe">60:00</div>
+          <div class="timer-progress"><div class="timer-progress-fill timer-safe" style="width:0%"></div></div>
+          <div class="timer-meta">
+            <div class="timer-start-adjust">
+              <button class="btn-timer-adj" onclick="adjustStartTime(-1)" title="開始時刻を1分前へ">-1分</button>
+              <span class="timer-start-time">${formatTime(session.startTime)}</span> 開始
+              <button class="btn-timer-adj" onclick="adjustStartTime(1)" title="開始時刻を1分後へ">+1分</button>
+            </div>
+          </div>
+        </div>
         <div class="text-sm mb-md">${exercises.length > 0 ? `${exercises.length}種目 記録済み` : 'まだ記録がありません'}</div>
         ${exListHtml}
         <div class="flex gap-sm mt-md">
@@ -224,7 +286,8 @@ async function renderHome(main) {
 
   if (activeSessionId) {
     const session = await getSession(activeSessionId);
-    startTimer(session.startTime, document.getElementById('session-timer'));
+    const timerContainer = document.getElementById('session-timer');
+    if (timerContainer) startTimer(session.startTime, timerContainer);
   }
 }
 
