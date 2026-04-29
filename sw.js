@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v4';
+const CACHE_NAME = 'training-app-v5';
 const ASSETS = [
   './',
   './index.html',
@@ -37,8 +37,14 @@ self.addEventListener('fetch', event => {
       )
     );
   } else {
+    // Network first for app shell to ensure latest version, fallback to cache if offline
     event.respondWith(
-      caches.match(event.request).then(response => response || fetch(event.request))
+      fetch(event.request).then(response => {
+        return caches.open(CACHE_NAME).then(cache => {
+          cache.put(event.request, response.clone());
+          return response;
+        });
+      }).catch(() => caches.match(event.request))
     );
   }
 });
