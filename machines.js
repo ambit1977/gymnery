@@ -16,6 +16,7 @@ const CATEGORIES = {
   lower: { label: '下半身', icon: '🦵', color: '#ff6b6b' },
   core: { label: '体幹', icon: '🧘', color: '#ffe66d' },
   arm: { label: '腕', icon: '🤜', color: '#a855f7' },
+  cardio: { label: '有酸素', icon: '🏃', color: '#38bdf8' },
 };
 
 // マシン定義 — スプレッドシートの列順序に対応
@@ -249,6 +250,21 @@ const MACHINES = [
     ],
     weights: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5],
     hasSets: true,
+  },
+
+  // === 有酸素 ===
+  {
+    id: 'treadmill',
+    name: 'トレッドミル',
+    category: 'cardio',
+    type: 'cardio',
+    sheetCol: 'T', // Placeholder or next column
+    fields: [
+      { key: 'distance', label: '距離', unit: 'km', type: 'number', step: 0.1, min: 0 },
+      { key: 'speed', label: '速度', unit: 'km/h', type: 'number', step: 0.1, min: 0 },
+      { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 },
+    ],
+    hasSets: false,
   },
 ];
 
