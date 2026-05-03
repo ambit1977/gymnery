@@ -7,6 +7,7 @@ let activeSessionId = null;
 let timerInterval = null;
 let alertedMinutes = new Set();
 let chartInstances = {};
+let intervalTimerId = null;
 
 // ========================================
 // 初期化
@@ -154,6 +155,20 @@ function startTimer(startTime, timerContainer) {
     }
     if (startTimeEl) {
       startTimeEl.textContent = formatTime(startTime);
+    }
+    
+    // Update modal timer if exists
+    const modalTimerEl = document.getElementById('modal-timer-display');
+    if (modalTimerEl) {
+      modalTimerEl.textContent = remainStr;
+      modalTimerEl.className = urgencyClass;
+    }
+    
+    // Overtime alert
+    if (isOvertime && !alertedMinutes.has('overtime')) {
+      alertedMinutes.add('overtime');
+      if (navigator.vibrate) navigator.vibrate([500, 200, 500, 200, 500]);
+      showToast('⚠️ 1時間が経過しました。セッションを終了してください。', 'danger');
     }
   };
   update();
@@ -378,11 +393,25 @@ async function openExerciseInput(machineId, editExerciseId = null) {
     const ex = await db.exercises.get(editExerciseId);
     if (ex) lastData = ex.data;
   } else {
-    const pastExercises = await getExercisesByMachine(machineId);
-    lastData = pastExercises.length > 0 ? pastExercises[0].data : null;
+    const setting = await getMachineSetting(machineId);
+    if (setting && setting.data) {
+      lastData = setting.data;
+    } else {
+      const pastExercises = await getExercisesByMachine(machineId);
+      lastData = pastExercises.length > 0 ? pastExercises[0].data : null;
+    }
+  }
+
+  let timerHeaderHtml = '';
+  if (activeSessionId) {
+    timerHeaderHtml = `
+      <div id="modal-timer-header" class="text-sm font-bold text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:6px; margin-bottom:12px;">
+        終了まで: <span id="modal-timer-display" style="font-variant-numeric: tabular-nums;">--:--</span>
+      </div>`;
   }
 
   let html = `<div class="modal-handle"></div>
+    ${timerHeaderHtml}
     <div class="modal-title">${getCategoryIcon(machine.category)} ${machine.name}</div>`;
 
   if (machine.type === 'strength' && machine.hasSets) {
@@ -392,7 +421,19 @@ async function openExerciseInput(machineId, editExerciseId = null) {
       html += renderSetRow(machine, i, s);
     });
     html += `</div>
-      <button class="btn btn-ghost btn-sm w-full mt-sm" onclick="addSetRow('${machineId}')">＋ セット追加</button>`;
+      <div class="flex items-center gap-sm mt-sm">
+        <button class="btn btn-ghost btn-sm" onclick="addSetRow('${machineId}')" style="flex:1; border: 1px dashed var(--border-color);">＋ セット追加</button>
+        <div style="display:flex; align-items:center; gap:4px; background:var(--bg-elevated); padding:2px; border-radius:var(--radius-sm); border: 1px solid var(--border-color);">
+          <select id="interval-select" class="input" style="width: auto; padding: 4px; font-size:0.85rem; background:transparent; border:none; margin:0; outline:none; -webkit-appearance:none; text-align:center;">
+            <option value="0">休0分</option>
+            <option value="1" selected>休1分</option>
+            <option value="2">休2分</option>
+            <option value="3">休3分</option>
+          </select>
+          <button class="btn btn-primary btn-sm" onclick="startIntervalTimer()" style="padding:4px 12px;">⏲️開始</button>
+        </div>
+      </div>
+      <div id="interval-display" class="timer-safe" style="display:none; text-align:center; font-size:2.5rem; font-weight:800; margin-top:12px; font-variant-numeric: tabular-nums;">01:00</div>`;
   } else {
     // Cardio
     html += `<div id="cardio-inputs">`;
@@ -415,11 +456,20 @@ async function openExerciseInput(machineId, editExerciseId = null) {
     html += `<div class="text-xs text-muted mt-sm">💡 前回の記録を反映しています</div>`;
   }
 
-  html += `
-    <div class="flex gap-sm mt-lg">
-      <button class="btn btn-secondary" onclick="closeModal();showMachineSelect()" style="flex:1">戻る</button>
-      <button class="btn btn-primary" onclick="saveExercise('${machineId}', ${editExerciseId || 'null'})" style="flex:1">${editExerciseId ? '更新' : '保存'}</button>
-    </div>`;
+  if (editExerciseId) {
+    html += `
+      <div class="flex gap-sm mt-lg">
+        <button class="btn btn-secondary" onclick="closeModal();showSessionDetail(${activeSessionId})" style="flex:1">戻る</button>
+        <button class="btn btn-primary" onclick="saveExercise('${machineId}', ${editExerciseId}, 'update')" style="flex:1">更新</button>
+      </div>`;
+  } else {
+    html += `
+      <div class="flex gap-sm mt-lg flex-wrap">
+        <button class="btn btn-secondary" onclick="closeModal();showMachineSelect()" style="flex:1; min-width: 80px;">戻る</button>
+        <button class="btn btn-secondary" onclick="saveExercise('${machineId}', null, 'again')" style="flex:1; min-width: 80px; background:var(--bg-card-hover);">再度(維持)</button>
+        <button class="btn btn-primary" onclick="saveExercise('${machineId}', null, 'ok')" style="flex:1; min-width: 80px;">OK(次回UP)</button>
+      </div>`;
+  }
 
   showModal(html);
 }
@@ -492,7 +542,7 @@ function removeSetRow(btn) {
   });
 }
 
-async function saveExercise(machineId, editExerciseId = null) {
+async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
   const machine = getMachineById(machineId);
   let data;
 
@@ -521,10 +571,74 @@ async function saveExercise(machineId, editExerciseId = null) {
   } else {
     await addExercise(activeSessionId, machineId, data);
     showToast(`${machine.name} を記録しました ✅`, 'success');
+    
+    // Save defaults logic
+    let defaultData = JSON.parse(JSON.stringify(data));
+    if (machine.type === 'strength' && machine.hasSets) {
+      if (mode === 'ok' && machine.weights && defaultData.length > 0) {
+        // Find highest weight and increment it
+        let maxWeight = 0;
+        defaultData.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
+        const idx = machine.weights.findIndex(w => w >= maxWeight);
+        if (idx !== -1 && idx < machine.weights.length - 1) {
+          const nextWeight = machine.weights[idx + 1];
+          defaultData.forEach(s => {
+            if (s.weight === maxWeight) s.weight = nextWeight;
+          });
+        }
+      }
+      await saveMachineSetting(machineId, { data: defaultData });
+    } else {
+      await saveMachineSetting(machineId, { data: defaultData });
+    }
   }
 
+  if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
   closeModal();
-  navigateTo('home');
+  if (editExerciseId) {
+    showSessionDetail(activeSessionId);
+  } else {
+    navigateTo('home');
+  }
+}
+
+function startIntervalTimer() {
+  const select = document.getElementById('interval-select');
+  const display = document.getElementById('interval-display');
+  const minutes = parseInt(select.value, 10);
+  
+  if (minutes === 0) {
+    if (intervalTimerId) clearInterval(intervalTimerId);
+    display.style.display = 'none';
+    return;
+  }
+  
+  display.style.display = 'block';
+  display.className = 'timer-safe';
+  
+  let remainMs = minutes * 60 * 1000;
+  if (intervalTimerId) clearInterval(intervalTimerId);
+  
+  const updateDisplay = () => {
+    if (remainMs <= 0) {
+      clearInterval(intervalTimerId);
+      display.textContent = "00:00";
+      display.className = 'timer-danger';
+      if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+      return;
+    }
+    const rM = Math.floor(remainMs / 60000);
+    const rS = Math.floor((remainMs % 60000) / 1000);
+    display.textContent = `${String(rM).padStart(2,'0')}:${String(rS).padStart(2,'0')}`;
+    
+    if (remainMs <= 10000) display.className = 'timer-danger';
+    else if (remainMs <= 30000) display.className = 'timer-warning';
+    
+    remainMs -= 1000;
+  };
+  
+  updateDisplay();
+  intervalTimerId = setInterval(updateDisplay, 1000);
 }
 
 // ========================================
@@ -574,7 +688,10 @@ async function showSessionDetail(sessionId) {
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
             <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
-            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
+            <div style="display:flex; gap:4px;">
+              <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
+              <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
+            </div>
           </div>
           <div class="exercise-sets">${setsHtml}</div>
         </div>`;
@@ -594,7 +711,10 @@ async function showSessionDetail(sessionId) {
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
             <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
-            <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
+            <div style="display:flex; gap:4px;">
+              <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
+              <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
+            </div>
           </div>
           <div class="exercise-cardio-stats">${statsHtml}</div>
         </div>`;
@@ -606,7 +726,10 @@ async function showSessionDetail(sessionId) {
     <div class="page">
       <button class="header-back mb-md" onclick="navigateTo('${currentPage === 'home' ? 'home' : 'history'}')">← 戻る</button>
       <div class="card mb-lg">
-        <div class="text-sm text-muted">${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 (${getDayOfWeek(session.startTime)})</div>
+        <div class="flex items-center justify-between">
+          <div class="text-sm text-muted">${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 (${getDayOfWeek(session.startTime)})</div>
+          <button class="btn btn-ghost btn-sm" onclick="editSessionTimes(${sessionId})" style="padding:0; color:var(--info);">✏️ 編集</button>
+        </div>
         <div class="flex items-center justify-between mt-sm">
           <div class="text-sm">${formatTime(session.startTime)}${session.endTime ? ' - ' + formatTime(session.endTime) : ' 〜'}</div>
           ${session.endTime ? `<div class="badge" style="background:var(--accent-glow);color:var(--accent)">${getSessionDuration(session)}</div>` : '<div class="badge" style="background:var(--accent-glow);color:var(--accent)">進行中</div>'}
@@ -669,6 +792,110 @@ async function doDeleteSession(sessionId) {
   navigateTo('history');
 }
 
+async function editSessionTimes(sessionId) {
+  const session = await getSession(sessionId);
+  if (!session) return;
+  const dStart = new Date(session.startTime);
+  const dEnd = session.endTime ? new Date(session.endTime) : null;
+  
+  const pad = (n) => String(n).padStart(2,'0');
+  const dStr = `${dStart.getFullYear()}-${pad(dStart.getMonth()+1)}-${pad(dStart.getDate())}`;
+  const tStartStr = `${pad(dStart.getHours())}:${pad(dStart.getMinutes())}`;
+  const tEndStr = dEnd ? `${pad(dEnd.getHours())}:${pad(dEnd.getMinutes())}` : '';
+
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">セッション編集</div>
+    <div class="input-group">
+      <label class="input-label">日付</label>
+      <input type="date" class="input" id="edit-session-date" value="${dStr}">
+    </div>
+    <div class="input-group">
+      <label class="input-label">開始時刻</label>
+      <input type="time" class="input" id="edit-session-start" value="${tStartStr}">
+    </div>
+    <div class="input-group">
+      <label class="input-label">終了時刻</label>
+      <input type="time" class="input" id="edit-session-end" value="${tEndStr}">
+    </div>
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-secondary" onclick="closeModal()" style="flex:1">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveSessionTimes(${sessionId})" style="flex:1">保存</button>
+    </div>
+  `);
+}
+
+async function saveSessionTimes(sessionId) {
+  const session = await getSession(sessionId);
+  const dStr = document.getElementById('edit-session-date').value;
+  const tStartStr = document.getElementById('edit-session-start').value;
+  const tEndStr = document.getElementById('edit-session-end').value;
+  
+  if (dStr && tStartStr) {
+    const startObj = new Date(`${dStr}T${tStartStr}:00`);
+    let updateData = { startTime: startObj.toISOString() };
+    if (tEndStr) {
+      const endObj = new Date(`${dStr}T${tEndStr}:00`);
+      updateData.endTime = endObj.toISOString();
+    } else {
+      updateData.endTime = null;
+    }
+    await db.sessions.update(sessionId, updateData);
+    showToast('セッション時間を更新しました', 'success');
+  }
+  closeModal();
+  showSessionDetail(sessionId);
+}
+
+function showAddPastSession() {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2,'0');
+  const dStr = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+  const tStartStr = `${pad(now.getHours()-1)}:00`;
+  const tEndStr = `${pad(now.getHours())}:00`;
+
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">過去の記録を追加</div>
+    <div class="input-group">
+      <label class="input-label">日付</label>
+      <input type="date" class="input" id="add-session-date" value="${dStr}">
+    </div>
+    <div class="input-group">
+      <label class="input-label">開始時刻</label>
+      <input type="time" class="input" id="add-session-start" value="${tStartStr}">
+    </div>
+    <div class="input-group">
+      <label class="input-label">終了時刻</label>
+      <input type="time" class="input" id="add-session-end" value="${tEndStr}">
+    </div>
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-secondary" onclick="closeModal()" style="flex:1">キャンセル</button>
+      <button class="btn btn-primary" onclick="doAddPastSession()" style="flex:1">作成</button>
+    </div>
+  `);
+}
+
+async function doAddPastSession() {
+  const dStr = document.getElementById('add-session-date').value;
+  const tStartStr = document.getElementById('add-session-start').value;
+  const tEndStr = document.getElementById('add-session-end').value;
+  
+  if (dStr && tStartStr) {
+    const startObj = new Date(`${dStr}T${tStartStr}:00`);
+    const endObj = tEndStr ? new Date(`${dStr}T${tEndStr}:00`) : null;
+    const id = await db.sessions.add({
+      facility: FACILITY.name,
+      startTime: startObj.toISOString(),
+      endTime: endObj ? endObj.toISOString() : null,
+      note: '',
+    });
+    showToast('過去のセッションを作成しました', 'success');
+    closeModal();
+    showSessionDetail(id);
+  }
+}
+
 // ========================================
 // 履歴画面
 // ========================================
@@ -702,7 +929,10 @@ async function renderHistory(main) {
   main.innerHTML = `
     <div class="page">
       <div id="calendar-container">${calendarHtml}</div>
-      <button class="btn btn-secondary btn-sm w-full mb-lg" onclick="exportAll()">📥 全データCSVエクスポート</button>
+      <div class="flex gap-sm mb-lg">
+        <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">📥 全データエクスポート</button>
+        <button class="btn btn-primary btn-sm" onclick="showAddPastSession()" style="flex:1">＋ 手動追加</button>
+      </div>
       <div class="section-title">全セッション</div>
       ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}
     </div>`;
@@ -1163,9 +1393,19 @@ function renderSettings(main) {
       </div>
 
       <div class="card mb-md">
-        <div class="text-sm font-bold mb-sm">📥 データエクスポート</div>
-        <p class="text-xs text-muted mb-md">全データをCSVファイルでダウンロードします</p>
-        <button class="btn btn-secondary btn-sm btn-block" onclick="exportAll()">CSVエクスポート</button>
+        <div class="text-sm font-bold mb-sm">⚙️ マシン初期値設定</div>
+        <p class="text-xs text-muted mb-md">各マシンのデフォルト重量や回数を設定します。</p>
+        <button class="btn btn-secondary btn-sm btn-block" onclick="showMachineDefaults()">初期値を設定</button>
+      </div>
+
+      <div class="card mb-md">
+        <div class="text-sm font-bold mb-sm">📥 データ入出力</div>
+        <p class="text-xs text-muted mb-md">全データのCSVエクスポートとインポートができます。</p>
+        <div class="flex gap-sm">
+          <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">エクスポート</button>
+          <input type="file" id="import-csv-input" multiple accept=".csv" style="display:none" onchange="handleImportCSV(event)">
+          <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-csv-input').click()" style="flex:1">インポート</button>
+        </div>
       </div>
 
       <div class="card mb-md">
@@ -1175,10 +1415,133 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v1.0</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
+}
+
+async function handleImportCSV(event) {
+  const files = event.target.files;
+  if (!files || files.length === 0) return;
+  try {
+    await importDataFromCSV(files);
+    showToast('データのインポートが完了しました', 'success');
+    setTimeout(() => location.reload(), 1500);
+  } catch (e) {
+    console.error(e);
+    showToast('インポートに失敗しました', 'danger');
+  }
+}
+
+async function showMachineDefaults() {
+  const allSettings = await getAllMachineSettings();
+  const settingsMap = {};
+  allSettings.forEach(s => settingsMap[s.machineId] = s.data);
+
+  const cats = Object.keys(CATEGORIES);
+  let html = `
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-md">
+      <div class="modal-title" style="margin-bottom:0">マシン初期値設定</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
+    </div>
+    <div class="settings-list" style="max-height:60vh; overflow-y:auto; padding-right:8px;">
+  `;
+
+  for (const cat of cats) {
+    const machines = getMachinesByCategory(cat);
+    html += `<div class="text-sm font-bold mb-sm mt-md" style="color:${getCategoryColor(cat)}">${getCategoryLabel(cat)}</div>`;
+    for (const m of machines) {
+      const def = settingsMap[m.id];
+      let valStr = '未設定';
+      if (def) {
+        if (m.type === 'strength' && Array.isArray(def) && def.length > 0) {
+          valStr = `${def[0].weight || 0}kg × ${def[0].reps || 0}回`;
+        } else if (def.duration) {
+          valStr = `${def.duration}分`;
+        }
+      }
+      html += `
+        <div class="flex items-center justify-between py-sm border-bottom" style="border-bottom:1px solid var(--border-color)">
+          <div class="text-sm">${m.name}</div>
+          <div class="flex items-center gap-sm">
+            <span class="text-xs text-muted">${valStr}</span>
+            <button class="btn btn-ghost btn-sm" onclick="editMachineDefault('${m.id}')" style="padding:4px">✏️</button>
+          </div>
+        </div>
+      `;
+    }
+  }
+  html += `</div>`;
+  showModal(html);
+}
+
+async function editMachineDefault(machineId) {
+  const machine = getMachineById(machineId);
+  const setting = await getMachineSetting(machineId);
+  let defaultData = setting ? setting.data : null;
+  
+  if (!defaultData && machine.type === 'strength') {
+    defaultData = [{}];
+  }
+
+  let inputsHtml = '';
+  if (machine.type === 'strength') {
+    const s = Array.isArray(defaultData) ? defaultData[0] : {};
+    machine.fields.forEach(f => {
+      let val = s[f.key] !== undefined ? s[f.key] : '';
+      if (val === '' && f.key === 'reps') val = 10;
+      inputsHtml += `
+        <div class="input-group">
+          <label class="input-label">${f.label}${f.unit ? ' ('+f.unit+')' : ''}</label>
+          <input type="${f.type}" class="input" id="def-${f.key}" value="${val}" step="${f.step||1}" min="${f.min||0}">
+        </div>
+      `;
+    });
+  } else {
+    machine.fields.forEach(f => {
+      let val = defaultData ? defaultData[f.key] : '';
+      inputsHtml += `
+        <div class="input-group">
+          <label class="input-label">${f.label}${f.unit ? ' ('+f.unit+')' : ''}</label>
+          <input type="${f.type}" class="input" id="def-${f.key}" value="${val}" step="${f.step||1}" min="${f.min||0}">
+        </div>
+      `;
+    });
+  }
+
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="modal-title">${machine.name} の初期値</div>
+    ${inputsHtml}
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-secondary" onclick="showMachineDefaults()" style="flex:1">戻る</button>
+      <button class="btn btn-primary" onclick="saveMachineDefaultBtn('${machineId}')" style="flex:1">保存</button>
+    </div>
+  `);
+}
+
+async function saveMachineDefaultBtn(machineId) {
+  const machine = getMachineById(machineId);
+  let data;
+  if (machine.type === 'strength') {
+    const set = {};
+    machine.fields.forEach(f => {
+      const val = document.getElementById(`def-${f.key}`).value;
+      set[f.key] = parseFloat(val) || 0;
+    });
+    data = [set];
+  } else {
+    data = {};
+    machine.fields.forEach(f => {
+      const val = document.getElementById(`def-${f.key}`).value;
+      data[f.key] = parseFloat(val) || 0;
+    });
+  }
+  await saveMachineSetting(machineId, { data });
+  showToast('初期値を保存しました', 'success');
+  showMachineDefaults();
 }
 
 function confirmClearAll() {

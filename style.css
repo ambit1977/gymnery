@@ -1429,6 +1429,7 @@ textarea.input {
 
 /* --- Utility --- */
 .flex { display: flex; }
+.flex-wrap { flex-wrap: wrap; }
 .flex-col { flex-direction: column; }
 .items-center { align-items: center; }
 .justify-between { justify-content: space-between; }
@@ -1451,6 +1452,7 @@ textarea.input {
 .mb-lg { margin-bottom: var(--space-lg); }
 .w-full { width: 100%; }
 .hidden { display: none !important; }
+.border-bottom { border-bottom: 1px solid var(--border-color); }
 
 /* Scrollbar */
 ::-webkit-scrollbar {

@@ -10,6 +10,10 @@ db.version(1).stores({
   bodyComposition: '++id, date',
 });
 
+db.version(2).stores({
+  machineSettings: 'machineId'
+});
+
 // ========================================
 // セッション CRUD
 // ========================================
@@ -121,6 +125,22 @@ async function getLatestBodyComposition() {
 }
 
 // ========================================
+// マシン設定 CRUD
+// ========================================
+
+async function getMachineSetting(machineId) {
+  return db.machineSettings.get(machineId);
+}
+
+async function saveMachineSetting(machineId, data) {
+  await db.machineSettings.put({ machineId, ...data });
+}
+
+async function getAllMachineSettings() {
+  return db.machineSettings.toArray();
+}
+
+// ========================================
 // エクスポート
 // ========================================
 
@@ -193,6 +213,80 @@ function downloadCSV(filename, content) {
 function downloadMultipleCSV(files) {
   for (const [filename, content] of Object.entries(files)) {
     downloadCSV(filename, content);
+  }
+}
+
+async function importDataFromCSV(fileList) {
+  for (const file of fileList) {
+    const text = await file.text();
+    const rows = text.split('\n').filter(r => r.trim());
+    if (rows.length < 2) continue;
+    
+    const headers = rows[0].split(',');
+    
+    if (file.name.includes('sessions')) {
+      for (let i = 1; i < rows.length; i++) {
+        // Simple CSV parsing (assuming no commas in notes for now, or basic handling)
+        const cols = rows[i].split(',').map(c => c.replace(/^"|"$/g, '').replace(/""/g, '"'));
+        if (cols.length < 5) continue;
+        const id = parseInt(cols[0]);
+        const facility = cols[1];
+        const startTime = new Date(cols[2]).toISOString();
+        const endTime = cols[3] ? new Date(cols[3]).toISOString() : null;
+        const note = cols[4];
+        
+        await db.sessions.put({ id, facility, startTime, endTime, note });
+      }
+    } else if (file.name.includes('exercises')) {
+      for (let i = 1; i < rows.length; i++) {
+        // Regex to match CSV columns correctly handling quotes
+        const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^,]*))/g;
+        let match;
+        const cols = [];
+        while ((match = regex.exec(rows[i])) !== null) {
+          cols.push(match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]);
+        }
+        if (cols.length < 7) continue;
+        
+        const id = parseInt(cols[0]);
+        const sessionId = parseInt(cols[1]);
+        const machineName = cols[2];
+        // mapping category back or just storing it
+        let category = 'upper';
+        if (cols[3].includes('下半身')) category = 'lower';
+        if (cols[3].includes('体幹')) category = 'core';
+        if (cols[3].includes('腕')) category = 'arm';
+        
+        const type = cols[4];
+        const data = JSON.parse(cols[5]);
+        const createdAt = new Date(cols[6]).toISOString();
+        
+        // Find machine ID from name
+        const machineId = MACHINES.find(m => m.name === machineName)?.id || '';
+        
+        await db.exercises.put({ id, sessionId, machineId, machineName, category, type, data, createdAt });
+      }
+    } else if (file.name.includes('body_composition')) {
+      for (let i = 1; i < rows.length; i++) {
+        const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^,]*))/g;
+        let match;
+        const cols = [];
+        while ((match = regex.exec(rows[i])) !== null) {
+          cols.push(match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]);
+        }
+        if (cols.length < 7) continue;
+        
+        const date = cols[0];
+        const weight = parseFloat(cols[1]) || null;
+        const bodyFat = parseFloat(cols[2]) || null;
+        const muscleMass = parseFloat(cols[3]) || null;
+        const bmi = parseFloat(cols[4]) || null;
+        const visceralFat = parseFloat(cols[5]) || null;
+        const note = cols[6] || '';
+        
+        await db.bodyComposition.put({ date, weight, bodyFat, muscleMass, bmi, visceralFat, note, createdAt: new Date().toISOString() });
+      }
+    }
   }
 }
 
