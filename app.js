@@ -406,7 +406,7 @@ async function openExerciseInput(machineId, editExerciseId = null) {
   let timerHeaderHtml = '';
   if (activeSessionId) {
     timerHeaderHtml = `
-      <div id="modal-timer-header" class="text-sm font-bold text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:6px; margin-bottom:12px;">
+      <div id="modal-timer-header" class="text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px; font-size:1.3rem; font-weight:800; border: 2px solid var(--accent-glow);">
         終了まで: <span id="modal-timer-display" style="font-variant-numeric: tabular-nums;">--:--</span>
       </div>`;
   }
