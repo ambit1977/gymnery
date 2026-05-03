@@ -214,10 +214,11 @@ async function renderHome(main) {
           setsHtml += `<span class="exercise-set-val">${s.weight || 0}kg × ${s.reps || 0}</span>`;
         });
       }
+      const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       exListHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}; cursor:pointer" onclick="openExerciseInput('${ex.machineId}', ${ex.id})">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${modeBadge}</span>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); confirmDeleteExercise(${ex.id},${activeSessionId})" style="color:var(--danger);padding:4px">✕</button>
           </div>
           <div class="exercise-sets">${setsHtml}</div>
@@ -430,7 +431,7 @@ async function openExerciseInput(machineId, editExerciseId = null) {
             <option value="2">休2分</option>
             <option value="3">休3分</option>
           </select>
-          <button class="btn btn-primary btn-sm" onclick="startIntervalTimer()" style="padding:4px 12px;">⏲️開始</button>
+          <button class="btn btn-primary btn-sm" onclick="startIntervalTimer('${machineId}')" style="padding:4px 12px;">⏲️開始</button>
         </div>
       </div>
       <div id="interval-display" class="timer-safe" style="display:none; text-align:center; font-size:2.5rem; font-weight:800; margin-top:12px; font-variant-numeric: tabular-nums;">01:00</div>`;
@@ -569,7 +570,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
     await updateExercise(editExerciseId, data);
     showToast(`${machine.name} を更新しました ✅`, 'success');
   } else {
-    await addExercise(activeSessionId, machineId, data);
+    await addExercise(activeSessionId, machineId, data, mode);
     showToast(`${machine.name} を記録しました ✅`, 'success');
     
     // Save defaults logic
@@ -587,7 +588,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
           });
         }
       }
-      await saveMachineSetting(machineId, { data: defaultData });
+      await saveMachineSetting(machineId, { data: [defaultData[0]] });
     } else {
       await saveMachineSetting(machineId, { data: defaultData });
     }
@@ -602,7 +603,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
   }
 }
 
-function startIntervalTimer() {
+function startIntervalTimer(machineId) {
   const select = document.getElementById('interval-select');
   const display = document.getElementById('interval-display');
   const minutes = parseInt(select.value, 10);
@@ -625,6 +626,7 @@ function startIntervalTimer() {
       display.textContent = "00:00";
       display.className = 'timer-danger';
       if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+      addSetRow(machineId);
       return;
     }
     const rM = Math.floor(remainMs / 60000);
@@ -684,10 +686,11 @@ async function showSessionDetail(sessionId) {
           <span class="exercise-set-val">${s.weight || 0}kg</span>
           <span class="exercise-set-val">${s.reps || 0}回${exerciseLabel}</span>`;
       });
+      const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${modeBadge}</span>
             <div style="display:flex; gap:4px;">
               <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
               <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
@@ -707,10 +710,11 @@ async function showSessionDetail(sessionId) {
           }
         });
       }
+      const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${modeBadge}</span>
             <div style="display:flex; gap:4px;">
               <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
               <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>

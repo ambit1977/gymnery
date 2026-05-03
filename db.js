@@ -52,7 +52,7 @@ async function deleteSession(sessionId) {
 // エクササイズ CRUD
 // ========================================
 
-async function addExercise(sessionId, machineId, data) {
+async function addExercise(sessionId, machineId, data, saveMode = null) {
   const machine = getMachineById(machineId);
   const id = await db.exercises.add({
     sessionId,
@@ -61,6 +61,7 @@ async function addExercise(sessionId, machineId, data) {
     category: machine.category,
     type: machine.type,
     data, // sets array for strength, or {duration, distance, ...} for cardio
+    saveMode,
     createdAt: new Date().toISOString(),
   });
   return id;
