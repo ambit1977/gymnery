@@ -213,6 +213,16 @@ async function renderHome(main) {
         ex.data.forEach((s, i) => {
           setsHtml += `<span class="exercise-set-val">${s.weight || 0}kg × ${s.reps || 0}</span>`;
         });
+      } else {
+        if (machine) {
+          machine.fields.forEach(f => {
+            if (ex.data[f.key]) setsHtml += `<span class="exercise-set-val">${ex.data[f.key]} ${f.label}</span>`;
+          });
+          if (machine.id === 'treadmill' && ex.data.distance && ex.data.speed) {
+            const calcDuration = Math.round((ex.data.distance / ex.data.speed) * 60);
+            setsHtml += `<span class="exercise-set-val">${calcDuration} 時間(分)</span>`;
+          }
+        }
       }
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
@@ -728,6 +738,13 @@ async function showSessionDetail(sessionId) {
             </div>`;
           }
         });
+        if (machine.id === 'treadmill' && ex.data.distance && ex.data.speed) {
+          const calcDuration = Math.round((ex.data.distance / ex.data.speed) * 60);
+          statsHtml += `<div class="exercise-cardio-stat">
+            <span class="exercise-cardio-stat-value">${calcDuration}</span>
+            <span class="exercise-cardio-stat-label">時間(分)</span>
+          </div>`;
+        }
       }
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';

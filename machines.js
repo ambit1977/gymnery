@@ -262,6 +262,17 @@ const MACHINES = [
     fields: [
       { key: 'distance', label: '距離', unit: 'km', type: 'number', step: 0.1, min: 0 },
       { key: 'speed', label: '速度', unit: 'km/h', type: 'number', step: 0.1, min: 0 },
+    ],
+    hasSets: false,
+  },
+  {
+    id: 'crosstrainer',
+    name: 'クロストレーナー',
+    category: 'cardio',
+    type: 'cardio',
+    sheetCol: 'U', // Placeholder or next column
+    fields: [
+      { key: 'resistance', label: '負荷', unit: 'レベル', type: 'number', step: 1, min: 1, max: 20 },
       { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 },
     ],
     hasSets: false,
