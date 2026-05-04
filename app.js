@@ -635,10 +635,11 @@ function startIntervalTimer(machineId) {
   display.style.display = 'block';
   display.className = 'timer-safe';
   
-  let remainMs = minutes * 60 * 1000;
+  const endTimeMs = Date.now() + minutes * 60 * 1000;
   if (intervalTimerId) clearInterval(intervalTimerId);
   
   const updateDisplay = () => {
+    const remainMs = endTimeMs - Date.now();
     if (remainMs <= 0) {
       clearInterval(intervalTimerId);
       display.textContent = "00:00";
@@ -653,8 +654,6 @@ function startIntervalTimer(machineId) {
     
     if (remainMs <= 10000) display.className = 'timer-danger';
     else if (remainMs <= 30000) display.className = 'timer-warning';
-    
-    remainMs -= 1000;
   };
   
   updateDisplay();
