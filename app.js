@@ -1536,6 +1536,14 @@ async function editMachineDefault(machineId) {
     });
   }
 
+  const defaultNote = setting ? (setting.note || '') : '';
+  inputsHtml += `
+    <div class="input-group">
+      <label class="input-label">ポジション・メモ</label>
+      <input type="text" class="input" id="def-note" value="${defaultNote}" placeholder="シート位置など">
+    </div>
+  `;
+
   showModal(`
     <div class="modal-handle"></div>
     <div class="modal-title">${machine.name} の初期値</div>
@@ -1564,7 +1572,8 @@ async function saveMachineDefaultBtn(machineId) {
       data[f.key] = parseFloat(val) || 0;
     });
   }
-  await saveMachineSetting(machineId, { data });
+  const note = document.getElementById('def-note').value;
+  await saveMachineSetting(machineId, { data, note });
   showToast('初期値を保存しました', 'success');
   showMachineDefaults();
 }
