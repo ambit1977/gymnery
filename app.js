@@ -215,6 +215,7 @@ async function renderHome(main) {
         });
       }
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
+      const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exListHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}; cursor:pointer" onclick="openExerciseInput('${ex.machineId}', ${ex.id})">
           <div class="exercise-header">
@@ -222,6 +223,7 @@ async function renderHome(main) {
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); confirmDeleteExercise(${ex.id},${activeSessionId})" style="color:var(--danger);padding:4px">✕</button>
           </div>
           <div class="exercise-sets">${setsHtml}</div>
+          ${noteHtml}
         </div>`;
     }
 
@@ -388,18 +390,26 @@ async function openExerciseInput(machineId, editExerciseId = null) {
   await new Promise(r => setTimeout(r, 300));
 
   let lastData = null;
+  let lastNote = '';
   if (editExerciseId) {
     const db = new Dexie('TrainingRoomApp');
     db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
     const ex = await db.exercises.get(editExerciseId);
-    if (ex) lastData = ex.data;
+    if (ex) {
+      lastData = ex.data;
+      lastNote = ex.note || '';
+    }
   } else {
     const setting = await getMachineSetting(machineId);
     if (setting && setting.data) {
       lastData = setting.data;
+      lastNote = setting.note || '';
     } else {
       const pastExercises = await getExercisesByMachine(machineId);
-      lastData = pastExercises.length > 0 ? pastExercises[0].data : null;
+      if (pastExercises.length > 0) {
+        lastData = pastExercises[0].data;
+        lastNote = pastExercises[0].note || '';
+      }
     }
   }
 
@@ -456,6 +466,12 @@ async function openExerciseInput(machineId, editExerciseId = null) {
   if (lastData && !editExerciseId) {
     html += `<div class="text-xs text-muted mt-sm">💡 前回の記録を反映しています</div>`;
   }
+
+  html += `
+    <div class="mt-sm mb-md">
+      <input type="text" id="machine-note" class="input" placeholder="ポジションや設定のメモ (例: シート5)" value="${lastNote}">
+    </div>
+  `;
 
   if (editExerciseId) {
     html += `
@@ -566,11 +582,13 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
     });
   }
 
+  const machineNote = document.getElementById('machine-note') ? document.getElementById('machine-note').value : '';
+
   if (editExerciseId) {
-    await updateExercise(editExerciseId, data);
+    await updateExercise(editExerciseId, data, machineNote);
     showToast(`${machine.name} を更新しました ✅`, 'success');
   } else {
-    await addExercise(activeSessionId, machineId, data, mode);
+    await addExercise(activeSessionId, machineId, data, mode, machineNote);
     showToast(`${machine.name} を記録しました ✅`, 'success');
     
     // Save defaults logic
@@ -588,9 +606,9 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
           });
         }
       }
-      await saveMachineSetting(machineId, { data: [defaultData[0]] });
+      await saveMachineSetting(machineId, { data: [defaultData[0]], note: machineNote });
     } else {
-      await saveMachineSetting(machineId, { data: defaultData });
+      await saveMachineSetting(machineId, { data: defaultData, note: machineNote });
     }
   }
 
@@ -687,6 +705,7 @@ async function showSessionDetail(sessionId) {
           <span class="exercise-set-val">${s.reps || 0}回${exerciseLabel}</span>`;
       });
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
+      const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
@@ -697,6 +716,7 @@ async function showSessionDetail(sessionId) {
             </div>
           </div>
           <div class="exercise-sets">${setsHtml}</div>
+          ${noteHtml}
         </div>`;
     } else {
       let statsHtml = '';
@@ -711,6 +731,7 @@ async function showSessionDetail(sessionId) {
         });
       }
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
+      const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
@@ -721,6 +742,7 @@ async function showSessionDetail(sessionId) {
             </div>
           </div>
           <div class="exercise-cardio-stats">${statsHtml}</div>
+          ${noteHtml}
         </div>`;
     }
   }
