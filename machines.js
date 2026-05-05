@@ -277,6 +277,18 @@ const MACHINES = [
     ],
     hasSets: false,
   },
+  {
+    id: 'bike',
+    name: 'バイク',
+    category: 'cardio',
+    type: 'cardio',
+    sheetCol: 'V',
+    fields: [
+      { key: 'resistance', label: '負荷', unit: 'レベル', type: 'number', step: 1, min: 1, max: 20 },
+      { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 },
+    ],
+    hasSets: false,
+  },
 ];
 
 // ヘルパー関数
