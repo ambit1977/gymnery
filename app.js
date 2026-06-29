@@ -354,6 +354,10 @@ async function doEndSession() {
   closeModal();
   showToast('お疲れさまでした！🎉', 'success');
   showSessionDetail(sid);
+  // Google Sheets 自動同期（設定がONの場合のみ）
+  if (typeof gsheetsMaybeAutoSync === 'function') {
+    gsheetsMaybeAutoSync().catch(e => console.warn('Sheets auto-sync:', e.message));
+  }
 }
 
 // ========================================
@@ -1461,6 +1465,16 @@ function renderSettings(main) {
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
+
+  // Google Sheets カードをデータ入出力カードの直前に差し込む
+  if (typeof gsheetsSettingsHtml === 'function') {
+    const dataCard = main.querySelector('.page .card:nth-child(3)');
+    const sheetsDiv = document.createElement('div');
+    sheetsDiv.innerHTML = gsheetsSettingsHtml();
+    if (dataCard) {
+      dataCard.parentNode.insertBefore(sheetsDiv.firstElementChild, dataCard);
+    }
+  }
 }
 
 async function handleImportCSV(event) {

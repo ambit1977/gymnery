@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v6';
+const CACHE_NAME = 'training-app-v7';
 const ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS = [
   './app.js',
   './db.js',
   './machines.js',
+  './gsheets.js',
   './manifest.json',
 ];
 
