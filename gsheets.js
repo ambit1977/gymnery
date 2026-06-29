@@ -2,6 +2,10 @@
 // gsheets.js - Google Sheets 連携
 // ========================================
 
+// 取得したクライアントIDをここにハードコーディングします。
+// 空文字列のままであれば、設定画面の手動入力値（localStorage）が使用されます。
+const GSHEETS_CLIENT_ID = '331967203622-vkssp85s9g6h3bvdq908p7v1k19p01m6.apps.googleusercontent.com'; // 例としてGen-Langプロジェクト用の形式、後ほど書き換えて使用
+
 const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
 let gsheetsAccessToken = null;
@@ -15,11 +19,15 @@ function gsheetsIsAuthorized() {
   return gsheetsAccessToken && Date.now() < gsheetsTokenExpiry;
 }
 
+function gsheetsGetClientId() {
+  return GSHEETS_CLIENT_ID || localStorage.getItem('gs_client_id') || '';
+}
+
 function gsheetsSignIn() {
   return new Promise((resolve, reject) => {
-    const clientId = localStorage.getItem('gs_client_id');
+    const clientId = gsheetsGetClientId();
     if (!clientId) {
-      reject(new Error('Client IDが設定されていません。設定画面で入力してください。'));
+      reject(new Error('Client IDが設定されていません。コードに記述するか設定画面で入力してください。'));
       return;
     }
     if (!window.google?.accounts?.oauth2) {
@@ -208,27 +216,35 @@ async function gsheetsSyncAll() {
 // ========================================
 
 function gsheetsSettingsHtml() {
-  const clientId = localStorage.getItem('gs_client_id') || '';
+  const isHardCoded = !!GSHEETS_CLIENT_ID;
+  const clientId = gsheetsGetClientId();
   const spreadsheetId = localStorage.getItem('gs_spreadsheet_id') || '';
   const authed = localStorage.getItem('gs_authed') === '1';
   const autoSync = localStorage.getItem('gs_auto_sync') === '1';
 
-  return `
-    <div class="card mb-md">
-      <div class="text-sm font-bold mb-sm">📊 Google Sheets 連携</div>
-      <p class="text-xs text-muted mb-md">
-        トレーニングデータをスプレッドシートにバックアップします。<br>
-        <a href="https://console.cloud.google.com/" target="_blank"
-           style="color:var(--accent)">Google Cloud Console</a> でOAuth2クライアントIDを取得し、
-        承認済みオリジンに <code style="font-size:0.65rem">https://ambit1977.github.io</code> を追加してください。
-      </p>
-
-      <div class="input-group mb-sm">
+  // クライアントIDがハードコードされている場合の入力フィールドの表示制御
+  const clientInputHtml = isHardCoded
+    ? `<input type="hidden" id="gs-client-id" value="${clientId}">`
+    : `<div class="input-group mb-sm">
         <label class="input-label">クライアントID</label>
         <input type="text" class="input text-xs" id="gs-client-id" value="${clientId}"
           placeholder="xxxx.apps.googleusercontent.com"
           onchange="localStorage.setItem('gs_client_id', this.value)">
-      </div>
+      </div>`;
+
+  const descriptionHtml = isHardCoded
+    ? `トレーニングデータをスプレッドシートにバックアップします。`
+    : `トレーニングデータをスプレッドシートにバックアップします。<br>
+       <a href="https://console.cloud.google.com/" target="_blank"
+          style="color:var(--accent)">Google Cloud Console</a> でOAuth2クライアントIDを取得し、
+       承認済みオリジンに <code style="font-size:0.65rem">https://ambit1977.github.io</code> を追加してください。`;
+
+  return `
+    <div class="card mb-md">
+      <div class="text-sm font-bold mb-sm">📊 Google Sheets 連携</div>
+      <p class="text-xs text-muted mb-md">${descriptionHtml}</p>
+
+      ${clientInputHtml}
 
       <div class="input-group mb-md">
         <label class="input-label">スプレッドシートID</label>
