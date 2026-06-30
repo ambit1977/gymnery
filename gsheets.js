@@ -4,7 +4,7 @@
 
 // 取得したクライアントIDをここにハードコーディングします。
 // 空文字列のままであれば、設定画面の手動入力値（localStorage）が使用されます。
-const GSHEETS_CLIENT_ID = '331967203622-vkssp85s9g6h3bvdq908p7v1k19p01m6.apps.googleusercontent.com'; // 例としてGen-Langプロジェクト用の形式、後ほど書き換えて使用
+const GSHEETS_CLIENT_ID = '826506708716-5lccjontlbg22p1218lg2f9die78lfap.apps.googleusercontent.com';
 
 const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
 
