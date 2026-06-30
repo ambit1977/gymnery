@@ -6,7 +6,7 @@
 // 空文字列のままであれば、設定画面の手動入力値（localStorage）が使用されます。
 const GSHEETS_CLIENT_ID = '826506708716-5lccjontlbg22p1218lg2f9die78lfap.apps.googleusercontent.com';
 
-const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets';
+const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
 let gsheetsAccessToken = null;
 let gsheetsTokenExpiry = 0;
@@ -27,7 +27,7 @@ function gsheetsSignIn() {
   return new Promise((resolve, reject) => {
     const clientId = gsheetsGetClientId();
     if (!clientId) {
-      reject(new Error('Client IDが設定されていません。コードに記述するか設定画面で入力してください。'));
+      reject(new Error('Client IDが設定されていません。'));
       return;
     }
     if (!window.google?.accounts?.oauth2) {
@@ -72,10 +72,6 @@ async function gsheetsEnsureToken() {
   return gsheetsAccessToken;
 }
 
-// ========================================
-// Sheets API ユーティリティ
-// ========================================
-
 async function sheetsRequest(method, endpoint, body = null) {
   const token = await gsheetsEnsureToken();
   const opts = {
@@ -92,6 +88,58 @@ async function sheetsRequest(method, endpoint, body = null) {
     throw new Error(err.error?.message || `Sheets API error ${res.status}`);
   }
   return res.status === 204 ? null : res.json();
+}
+
+async function driveRequest(method, url, body = null) {
+  const token = await gsheetsEnsureToken();
+  const opts = {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Drive API error ${res.status}`);
+  }
+  return res.json();
+}
+
+// ユーザーのマイドライブから既存のアプリ専用スプレッドシートを検索し、無ければ新規作成する
+async function gsheetsFindOrCreateSpreadsheet() {
+  const filename = 'Gymnery_Training_Log';
+  showToast('Google ドライブ内を検索中...🔍', '');
+  
+  // 1. 既存のファイルがないか名前で検索
+  const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(
+    `name='${filename}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`
+  )}&fields=files(id,name)`;
+  
+  const searchResult = await driveRequest('GET', searchUrl);
+  
+  if (searchResult.files && searchResult.files.length > 0) {
+    const sheetId = searchResult.files[0].id;
+    localStorage.setItem('gs_spreadsheet_id', sheetId);
+    showToast('既存のスプレッドシートと連携しました 🔗', 'success');
+    return sheetId;
+  }
+  
+  // 2. なければ新規スプレッドシートを作成
+  showToast('新規スプレッドシートを作成中...📄', '');
+  const createUrl = 'https://www.googleapis.com/drive/v3/files';
+  const createBody = {
+    name: filename,
+    mimeType: 'application/vnd.google-apps.spreadsheet',
+  };
+  
+  const createdFile = await driveRequest('POST', createUrl, createBody);
+  const newSheetId = createdFile.id;
+  localStorage.setItem('gs_spreadsheet_id', newSheetId);
+  showToast('スプレッドシートを新規作成し連携しました ✨', 'success');
+  return newSheetId;
 }
 
 // ========================================
@@ -235,9 +283,17 @@ function gsheetsSettingsHtml() {
   const descriptionHtml = isHardCoded
     ? `トレーニングデータをスプレッドシートにバックアップします。`
     : `トレーニングデータをスプレッドシートにバックアップします。<br>
-       <a href="https://console.cloud.google.com/" target="_blank"
-          style="color:var(--accent)">Google Cloud Console</a> でOAuth2クライアントIDを取得し、
+       Google Cloud Console でOAuth2クライアントIDを取得し、
        承認済みオリジンに <code style="font-size:0.65rem">https://ambit1977.github.io</code> を追加してください。`;
+
+  // 連携済みのスプレッドシートID表示
+  const spreadsheetInfoHtml = authed
+    ? `<div class="mb-md" style="background:var(--bg-elevated); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
+        <div class="text-xs text-muted">連携中のスプレッドシート</div>
+        <div class="text-xs font-bold" style="word-break:break-all; color:var(--accent);">Gymnery_Training_Log</div>
+        <div class="text-xs text-muted mt-xs" style="font-size:0.65rem; word-break:break-all;">ID: ${spreadsheetId || '未同期'}</div>
+      </div>`
+    : ``;
 
   return `
     <div class="card mb-md">
@@ -245,13 +301,7 @@ function gsheetsSettingsHtml() {
       <p class="text-xs text-muted mb-md">${descriptionHtml}</p>
 
       ${clientInputHtml}
-
-      <div class="input-group mb-md">
-        <label class="input-label">スプレッドシートID</label>
-        <input type="text" class="input text-xs" id="gs-sheet-id" value="${spreadsheetId}"
-          placeholder="URLの /d/ と /edit の間の文字列"
-          onchange="localStorage.setItem('gs_spreadsheet_id', this.value)">
-      </div>
+      ${spreadsheetInfoHtml}
 
       <div class="flex items-center justify-between mb-md">
         <span class="text-xs">トレーニング終了時に自動同期</span>
@@ -283,25 +333,24 @@ function gsheetsSettingsHtml() {
 }
 
 async function gsheetsSignInAndUpdate() {
-  // 入力欄の値を先に保存
   const clientIdEl = document.getElementById('gs-client-id');
-  const sheetIdEl = document.getElementById('gs-sheet-id');
   if (clientIdEl?.value) localStorage.setItem('gs_client_id', clientIdEl.value);
-  if (sheetIdEl?.value) localStorage.setItem('gs_spreadsheet_id', sheetIdEl.value);
 
   try {
+    // 1. Google 認証
     await gsheetsSignIn();
+    
+    // 2. マイドライブ内から専用シートを検索 or 新規作成
+    await gsheetsFindOrCreateSpreadsheet();
+    
     showToast('Googleアカウントと連携しました ✅', 'success');
     renderSettings(document.getElementById('main-content'));
   } catch (e) {
-    showToast(`認証エラー: ${e.message}`, 'danger');
+    showToast(`連携エラー: ${e.message}`, 'danger');
   }
 }
 
 async function gsheetsSyncAllUI() {
-  const sheetIdEl = document.getElementById('gs-sheet-id');
-  if (sheetIdEl?.value) localStorage.setItem('gs_spreadsheet_id', sheetIdEl.value);
-
   showToast('同期中...⏳', '');
   try {
     const result = await gsheetsSyncAll();
@@ -309,6 +358,7 @@ async function gsheetsSyncAllUI() {
       `同期完了 ✅  セッション+${result.sessions} / 記録+${result.exercises} / 体組成+${result.body}`,
       'success'
     );
+    renderSettings(document.getElementById('main-content'));
   } catch (e) {
     console.error(e);
     showToast(`同期エラー: ${e.message}`, 'danger');
