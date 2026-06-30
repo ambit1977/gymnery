@@ -110,7 +110,7 @@ async function driveRequest(method, url, body = null) {
 
 // ユーザーのマイドライブから既存のアプリ専用スプレッドシートを検索し、無ければ新規作成する
 async function gsheetsFindOrCreateSpreadsheet() {
-  const filename = 'Gymnery_Training_Log';
+  const filename = 'Gymny_Training_Log';
   showToast('Google ドライブ内を検索中...🔍', '');
   
   // 1. 既存のファイルがないか名前で検索
@@ -290,7 +290,7 @@ function gsheetsSettingsHtml() {
   const spreadsheetInfoHtml = authed
     ? `<div class="mb-md" style="background:var(--bg-elevated); padding:8px; border-radius:var(--radius-sm); border:1px solid var(--border-color);">
         <div class="text-xs text-muted">連携中のスプレッドシート</div>
-        <div class="text-xs font-bold" style="word-break:break-all; color:var(--accent);">Gymnery_Training_Log</div>
+        <div class="text-xs font-bold" style="word-break:break-all; color:var(--accent);">Gymny_Training_Log</div>
         <div class="text-xs text-muted mt-xs" style="font-size:0.65rem; word-break:break-all;">ID: ${spreadsheetId || '未同期'}</div>
       </div>`
     : ``;
