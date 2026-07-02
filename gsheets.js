@@ -181,69 +181,211 @@ async function gsheetEnsureSheets(spreadsheetId) {
 }
 
 // ========================================
-// 差分同期ロジック
+// 差分同期 ＆ 双方向マージロジック
 // ========================================
 
-async function gsheetGetExistingIds(spreadsheetId, sheetName) {
+async function gsheetFetchAllRows(spreadsheetId, sheetName) {
   try {
     const res = await sheetsRequest('GET',
-      `/${spreadsheetId}/values/${encodeURIComponent(sheetName + '!A2:A')}?majorDimension=COLUMNS`
+      `/${spreadsheetId}/values/${encodeURIComponent(sheetName + '!A2:J')}?majorDimension=ROWS`
     );
-    return new Set((res.values?.[0] || []).map(String));
-  } catch {
-    return new Set();
+    return res.values || [];
+  } catch (e) {
+    console.warn(`Failed to fetch sheet ${sheetName}:`, e);
+    return [];
   }
 }
 
+// 1. セッションの双方向同期
 async function gsheetSyncSessions(spreadsheetId) {
-  const sessions = await getAllSessions();
-  const existing = await gsheetGetExistingIds(spreadsheetId, 'sessions');
-  const newRows = sessions
-    .filter(s => !existing.has(String(s.id)))
-    .map(s => [s.id, s.facility || '', s.startTime || '', s.endTime || '', s.note || '']);
+  const localItems = await db.sessions.toArray();
+  const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'sessions');
 
-  if (newRows.length === 0) return 0;
-  await sheetsRequest('POST',
-    `/${spreadsheetId}/values/${encodeURIComponent('sessions!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { values: newRows }
-  );
-  return newRows.length;
+  const localMap = new Map(localItems.map(s => [String(s.id), s]));
+  const remoteMap = new Map();
+  
+  remoteRows.forEach(row => {
+    if (!row[0]) return;
+    remoteMap.set(String(row[0]), {
+      id: Number(row[0]),
+      facility: row[1] || '',
+      startTime: row[2] || '',
+      endTime: row[3] || null,
+      note: row[4] || '',
+    });
+  });
+
+  let localAdded = 0;
+  let remoteToAdd = [];
+
+  // スプレッドシート -> ローカルDB (マージ・追加)
+  for (const [idStr, remoteItem] of remoteMap.entries()) {
+    const localItem = localMap.get(idStr);
+    if (!localItem) {
+      await db.sessions.put(remoteItem);
+      localAdded++;
+    } else {
+      // 重複時は開始時間を比較し、より最新のデータや終了時間がある方を優先
+      const hasUpdates = (remoteItem.endTime && !localItem.endTime) || 
+                         (remoteItem.note && !localItem.note);
+      if (hasUpdates) {
+        await db.sessions.update(localItem.id, {
+          endTime: remoteItem.endTime || localItem.endTime,
+          note: remoteItem.note || localItem.note,
+        });
+      }
+    }
+  }
+
+  // ローカルDB -> スプレッドシート (不足分を抽出)
+  for (const [idStr, localItem] of localMap.entries()) {
+    if (!remoteMap.has(idStr)) {
+      remoteToAdd.push([
+        localItem.id,
+        localItem.facility || '',
+        localItem.startTime || '',
+        localItem.endTime || '',
+        localItem.note || '',
+      ]);
+    }
+  }
+
+  if (remoteToAdd.length > 0) {
+    await sheetsRequest('POST',
+      `/${spreadsheetId}/values/${encodeURIComponent('sessions!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { values: remoteToAdd }
+    );
+  }
+
+  return { localAdded, remoteAdded: remoteToAdd.length };
 }
 
+// 2. エクササイズの双方向同期
 async function gsheetSyncExercises(spreadsheetId) {
-  const all = await db.exercises.toArray();
-  const existing = await gsheetGetExistingIds(spreadsheetId, 'exercises');
-  const newRows = all
-    .filter(e => !existing.has(String(e.id)))
-    .map(e => [
-      e.id, e.sessionId, e.machineId,
-      e.machineName || '', e.category || '', e.type || '',
-      JSON.stringify(e.data),
-      e.saveMode || '', e.note || '', e.createdAt || '',
-    ]);
+  const localItems = await db.exercises.toArray();
+  const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'exercises');
 
-  if (newRows.length === 0) return 0;
-  await sheetsRequest('POST',
-    `/${spreadsheetId}/values/${encodeURIComponent('exercises!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { values: newRows }
-  );
-  return newRows.length;
+  const localMap = new Map(localItems.map(e => [String(e.id), e]));
+  const remoteMap = new Map();
+
+  remoteRows.forEach(row => {
+    if (!row[0]) return;
+    let dataParsed = [];
+    try {
+      dataParsed = JSON.parse(row[6] || '[]');
+    } catch (err) {
+      console.error('Error parsing exercise data from sheet:', err);
+    }
+    remoteMap.set(String(row[0]), {
+      id: Number(row[0]),
+      sessionId: Number(row[1]),
+      machineId: row[2] || '',
+      machineName: row[3] || '',
+      category: row[4] || '',
+      type: row[5] || '',
+      data: dataParsed,
+      saveMode: row[7] || '',
+      note: row[8] || '',
+      createdAt: row[9] || '',
+    });
+  });
+
+  let localAdded = 0;
+  let remoteToAdd = [];
+
+  // スプレッドシート -> ローカルDB (追加)
+  for (const [idStr, remoteItem] of remoteMap.entries()) {
+    if (!localMap.has(idStr)) {
+      await db.exercises.put(remoteItem);
+      localAdded++;
+    }
+  }
+
+  // ローカルDB -> スプレッドシート (追加)
+  for (const [idStr, localItem] of localMap.entries()) {
+    if (!remoteMap.has(idStr)) {
+      remoteToAdd.push([
+        localItem.id,
+        localItem.sessionId,
+        localItem.machineId,
+        localItem.machineName || '',
+        localItem.category || '',
+        localItem.type || '',
+        JSON.stringify(localItem.data),
+        localItem.saveMode || '',
+        localItem.note || '',
+        localItem.createdAt || '',
+      ]);
+    }
+  }
+
+  if (remoteToAdd.length > 0) {
+    await sheetsRequest('POST',
+      `/${spreadsheetId}/values/${encodeURIComponent('exercises!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { values: remoteToAdd }
+    );
+  }
+
+  return { localAdded, remoteAdded: remoteToAdd.length };
 }
 
+// 3. 体組成データの双方向同期
 async function gsheetSyncBody(spreadsheetId) {
-  const all = await db.bodyComposition.toArray();
-  const existing = await gsheetGetExistingIds(spreadsheetId, 'bodyComposition');
-  const newRows = all
-    .filter(r => !existing.has(String(r.id)))
-    .map(r => [r.id, r.date || '', r.weight || '', r.bodyFat || '',
-                r.muscleMass || '', r.bmi || '', r.visceralFat || '', r.note || '']);
+  const localItems = await db.bodyComposition.toArray();
+  const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'bodyComposition');
 
-  if (newRows.length === 0) return 0;
-  await sheetsRequest('POST',
-    `/${spreadsheetId}/values/${encodeURIComponent('bodyComposition!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-    { values: newRows }
-  );
-  return newRows.length;
+  const localMap = new Map(localItems.map(r => [String(r.id), r]));
+  const remoteMap = new Map();
+
+  remoteRows.forEach(row => {
+    if (!row[0]) return;
+    remoteMap.set(String(row[0]), {
+      id: Number(row[0]),
+      date: row[1] || '',
+      weight: row[2] ? parseFloat(row[2]) : null,
+      bodyFat: row[3] ? parseFloat(row[3]) : null,
+      muscleMass: row[4] ? parseFloat(row[4]) : null,
+      bmi: row[5] ? parseFloat(row[5]) : null,
+      visceralFat: row[6] ? parseFloat(row[6]) : null,
+      note: row[7] || '',
+    });
+  });
+
+  let localAdded = 0;
+  let remoteToAdd = [];
+
+  // スプレッドシート -> ローカルDB (追加)
+  for (const [idStr, remoteItem] of remoteMap.entries()) {
+    if (!localMap.has(idStr)) {
+      await db.bodyComposition.put(remoteItem);
+      localAdded++;
+    }
+  }
+
+  // ローカルDB -> スプレッドシート (追加)
+  for (const [idStr, localItem] of localMap.entries()) {
+    if (!remoteMap.has(idStr)) {
+      remoteToAdd.push([
+        localItem.id,
+        localItem.date || '',
+        localItem.weight || '',
+        localItem.bodyFat || '',
+        localItem.muscleMass || '',
+        localItem.bmi || '',
+        localItem.visceralFat || '',
+        localItem.note || '',
+      ]);
+    }
+  }
+
+  if (remoteToAdd.length > 0) {
+    await sheetsRequest('POST',
+      `/${spreadsheetId}/values/${encodeURIComponent('bodyComposition!A2')}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { values: remoteToAdd }
+    );
+  }
+
+  return { localAdded, remoteAdded: remoteToAdd.length };
 }
 
 async function gsheetsSyncAll() {
@@ -256,7 +398,13 @@ async function gsheetsSyncAll() {
     gsheetSyncExercises(spreadsheetId),
     gsheetSyncBody(spreadsheetId),
   ]);
-  return { sessions: s, exercises: e, body: b };
+  
+  return {
+    sessions: s.remoteAdded + s.localAdded,
+    exercises: e.remoteAdded + e.localAdded,
+    body: b.remoteAdded + b.localAdded,
+    localDownloaded: s.localAdded + e.localAdded + b.localAdded
+  };
 }
 
 // ========================================
@@ -354,10 +502,18 @@ async function gsheetsSyncAllUI() {
   showToast('同期中...⏳', '');
   try {
     const result = await gsheetsSyncAll();
-    showToast(
-      `同期完了 ✅  セッション+${result.sessions} / 記録+${result.exercises} / 体組成+${result.body}`,
-      'success'
-    );
+    // 双方向マージ結果をトーストでお知らせ
+    if (result.localDownloaded > 0) {
+      showToast(
+        `同期完了 ✅  スプレッドシートから ${result.localDownloaded} 件の新しいデータを反映し、未同期分をアップロードしました。`,
+        'success'
+      );
+    } else {
+      showToast(
+        `同期完了 ✅  データは最新です（スプレッドシートに未同期データをアップロードしました）`,
+        'success'
+      );
+    }
     renderSettings(document.getElementById('main-content'));
   } catch (e) {
     console.error(e);
