@@ -8,6 +8,7 @@ let timerInterval = null;
 let alertedMinutes = new Set();
 let chartInstances = {};
 let intervalTimerId = null;
+let intervalTimerEndTime = 0;
 
 // ========================================
 // 初期化
@@ -440,25 +441,24 @@ async function openExerciseInput(machineId, editExerciseId = null) {
     <div class="modal-title">${getCategoryIcon(machine.category)} ${machine.name}</div>`;
 
   if (machine.type === 'strength' && machine.hasSets) {
-    const defaultSets = lastData && Array.isArray(lastData) ? lastData : [{}];
+    let defaultSets = lastData && Array.isArray(lastData) ? lastData : [{}];
+    // 新規作成時（editExerciseId が無い場合）は1セットのみ表示にする
+    if (!editExerciseId && defaultSets.length > 0) {
+      defaultSets = [defaultSets[0]];
+    }
     html += `<div id="sets-container">`;
     defaultSets.forEach((s, i) => {
       html += renderSetRow(machine, i, s);
     });
     html += `</div>
-      <div class="flex items-center gap-sm mt-sm">
-        <button class="btn btn-ghost btn-sm" onclick="addSetRow('${machineId}')" style="flex:1; border: 1px dashed var(--border-color);">＋ セット追加</button>
-        <div style="display:flex; align-items:center; gap:4px; background:var(--bg-elevated); padding:2px; border-radius:var(--radius-sm); border: 1px solid var(--border-color);">
-          <select id="interval-select" class="input" style="width: auto; padding: 4px; font-size:0.85rem; background:transparent; border:none; margin:0; outline:none; -webkit-appearance:none; text-align:center;">
-            <option value="0">休0分</option>
-            <option value="1" selected>休1分</option>
-            <option value="2">休2分</option>
-            <option value="3">休3分</option>
-          </select>
-          <button class="btn btn-primary btn-sm" onclick="startIntervalTimer('${machineId}')" style="padding:4px 12px;">⏲️開始</button>
-        </div>
+      <div class="flex items-center gap-md mt-sm w-full">
+        <button class="btn btn-secondary flex items-center justify-center" onclick="addSetRow('${machineId}')" style="width:40px; height:40px; border-radius:50%; padding:0; font-size:1.5rem; flex-shrink:0;">＋</button>
+        <button class="btn btn-secondary flex items-center justify-center" onclick="startIntervalTimer('${machineId}')" style="border-radius:20px; padding:0 20px; height:40px; font-weight:bold; flex-grow:1;">＋ インターバル</button>
       </div>
-      <div id="interval-display" class="timer-safe" style="display:none; text-align:center; font-size:2.5rem; font-weight:800; margin-top:12px; font-variant-numeric: tabular-nums;">01:00</div>`;
+      <div id="interval-timer-container" class="card mt-md" style="display:none; align-items:center; justify-content:space-between; padding:12px 20px;">
+        <div id="interval-display" class="timer-safe" style="font-size:2.2rem; font-weight:800; font-variant-numeric: tabular-nums; line-height:1;">01:00</div>
+        <button class="btn btn-secondary btn-sm" onclick="addOneMinuteToInterval()" style="padding:6px 12px; border-radius:var(--radius-sm); font-weight:bold;">＋1分</button>
+      </div>`;
   } else {
     // Cardio
     html += `<div id="cardio-inputs">`;
@@ -636,24 +636,20 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
 }
 
 function startIntervalTimer(machineId) {
-  const select = document.getElementById('interval-select');
+  const container = document.getElementById('interval-timer-container');
   const display = document.getElementById('interval-display');
-  const minutes = parseInt(select.value, 10);
   
-  if (minutes === 0) {
-    if (intervalTimerId) clearInterval(intervalTimerId);
-    display.style.display = 'none';
-    return;
-  }
+  if (!container || !display) return;
   
-  display.style.display = 'block';
+  container.style.display = 'flex';
   display.className = 'timer-safe';
   
-  const endTimeMs = Date.now() + minutes * 60 * 1000;
+  // デフォルト1分(60秒)で開始
+  intervalTimerEndTime = Date.now() + 60 * 1000;
   if (intervalTimerId) clearInterval(intervalTimerId);
   
   const updateDisplay = () => {
-    const remainMs = endTimeMs - Date.now();
+    const remainMs = intervalTimerEndTime - Date.now();
     if (remainMs <= 0) {
       clearInterval(intervalTimerId);
       display.textContent = "00:00";
@@ -668,10 +664,18 @@ function startIntervalTimer(machineId) {
     
     if (remainMs <= 10000) display.className = 'timer-danger';
     else if (remainMs <= 30000) display.className = 'timer-warning';
+    else display.className = 'timer-safe';
   };
   
   updateDisplay();
-  intervalTimerId = setInterval(updateDisplay, 1000);
+  intervalTimerId = setInterval(updateDisplay, 250);
+}
+
+function addOneMinuteToInterval() {
+  if (intervalTimerId) {
+    intervalTimerEndTime += 60 * 1000;
+    showToast('インターバルを1分追加しました ⏲️', 'success');
+  }
 }
 
 // ========================================
