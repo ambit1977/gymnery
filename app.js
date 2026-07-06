@@ -28,6 +28,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // Initialize default member ID C-41 if not present
+  if (!localStorage.getItem('member_id')) {
+    localStorage.setItem('member_id', 'C-41');
+  }
+
   // Setup navigation
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.page));
@@ -311,7 +316,74 @@ async function renderHome(main) {
       </div>`;
   }
 
-  main.innerHTML = `<div class="page">${activeHtml}${recentHtml}${bodyHtml}</div>`;
+  // ========================================
+  // 持ち物チェックリスト & 会員証初期化
+  // ========================================
+  const todayStr = new Date().toISOString().split('T')[0];
+  const lastChecklistDate = localStorage.getItem('checklist_date');
+  if (lastChecklistDate !== todayStr) {
+    // 日付が変わったらチェック状態をすべてクリア
+    localStorage.setItem('checklist_date', todayStr);
+    localStorage.setItem('checklist_states', JSON.stringify([]));
+  }
+
+  let checkedItems = [];
+  try {
+    checkedItems = JSON.parse(localStorage.getItem('checklist_states') || '[]');
+  } catch (e) {
+    checkedItems = [];
+  }
+
+  const checklistItems = [
+    '靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル',
+    '替靴下', '替下着', '替シャツ', '替ズボン', '洗面用具類',
+    'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋',
+    'プロテイン飲む', 'ティッシュ / ウェットティッシュ'
+  ];
+
+  const memberId = localStorage.getItem('member_id') || 'C-41';
+
+  // 会員証カードHTML
+  const memberCardHtml = `
+    <div class="card mb-md" style="background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%); border: 1px solid var(--accent-glow); padding: 16px; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius-md);">
+      <div>
+        <div class="text-xs text-muted" style="letter-spacing: 1px;">MEMBERSHIP CARD</div>
+        <div class="text-md font-bold mt-xs" style="color: var(--text-primary); font-size: 1.1rem;">練馬区利用証</div>
+      </div>
+      <div class="text-right">
+        <div class="text-xs text-muted">会員番号</div>
+        <div class="text-lg font-bold" style="color: var(--accent); font-family: monospace; letter-spacing: 1px; font-size: 1.4rem;">${memberId}</div>
+      </div>
+    </div>
+  `;
+
+  // チェックリストHTML
+  let checklistRowsHtml = '';
+  checklistItems.forEach((item, idx) => {
+    const isChecked = checkedItems.includes(item);
+    checklistRowsHtml += `
+      <label class="flex items-center gap-sm py-xs" style="cursor: pointer; user-select: none; font-size: 0.9rem; border-bottom: 1px solid rgba(255,255,255,0.03);">
+        <input type="checkbox" class="checklist-item-check" data-item="${item}" ${isChecked ? 'checked' : ''} onchange="toggleChecklistItem(this)" style="width: 18px; height: 18px; accent-color: var(--accent);">
+        <span style="color: ${isChecked ? 'var(--text-muted)' : 'var(--text-primary)'}; text-decoration: ${isChecked ? 'line-through' : 'none'};">${item}</span>
+      </label>
+    `;
+  });
+
+  const isChecklistOpen = localStorage.getItem('checklist_open') === '1';
+
+  const checklistHtml = `
+    <div class="card mb-md" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
+      <div onclick="toggleChecklistAccordion()" class="flex items-center justify-between" style="padding: 12px 16px; background: var(--bg-secondary); cursor: pointer; user-select: none;">
+        <span class="text-sm font-bold flex items-center gap-xs">🎒 持ち物チェックリスト <span id="checklist-progress-badge" class="badge" style="background: var(--accent-glow); color: var(--accent); font-size: 0.7rem; padding: 2px 6px;">${checkedItems.length}/${checklistItems.length}</span></span>
+        <span id="checklist-arrow" style="transform: ${isChecklistOpen ? 'rotate(90deg)' : 'rotate(0)'}; transition: transform 0.2s;">▶</span>
+      </div>
+      <div id="checklist-body" style="display: ${isChecklistOpen ? 'block' : 'none'}; padding: 12px 16px; background: var(--bg-card); max-height: 280px; overflow-y: auto;">
+        ${checklistRowsHtml}
+      </div>
+    </div>
+  `;
+
+  main.innerHTML = `<div class="page">${memberCardHtml}${checklistHtml}${activeHtml}${recentHtml}${bodyHtml}</div>`;
 
   if (activeSessionId) {
     const session = await getSession(activeSessionId);
@@ -1661,6 +1733,15 @@ function renderSettings(main) {
       </div>
 
       <div class="card mb-md">
+        <div class="text-sm font-bold mb-sm">🪪 会員番号設定</div>
+        <p class="text-xs text-muted mb-md">受付用の会員番号（利用証番号）を登録します。</p>
+        <div class="flex gap-sm">
+          <input type="text" class="input text-xs" id="setting-member-id" value="${localStorage.getItem('member_id') || 'C-41'}" placeholder="C-41" style="flex:2;">
+          <button class="btn btn-primary btn-sm" onclick="saveSettingMemberId()" style="flex:1;">保存</button>
+        </div>
+      </div>
+
+      <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">⚙️ マシン初期値設定</div>
         <p class="text-xs text-muted mb-md">各マシンのデフォルト重量や回数を設定します。</p>
         <button class="btn btn-secondary btn-sm btn-block" onclick="showMachineDefaults()">初期値を設定</button>
@@ -1690,11 +1771,23 @@ function renderSettings(main) {
 
   // Google Sheets カードをデータ入出力カードの直前に差し込む
   if (typeof gsheetsSettingsHtml === 'function') {
-    const dataCard = main.querySelector('.page .card:nth-child(3)');
+    const dataCard = main.querySelector('.page .card:nth-child(4)');
     const sheetsDiv = document.createElement('div');
     sheetsDiv.innerHTML = gsheetsSettingsHtml();
     if (dataCard) {
       dataCard.parentNode.insertBefore(sheetsDiv.firstElementChild, dataCard);
+    }
+  }
+}
+
+function saveSettingMemberId() {
+  const input = document.getElementById('setting-member-id');
+  if (input) {
+    const val = input.value.trim();
+    if (val) {
+      localStorage.setItem('member_id', val);
+      showToast('会員番号を保存しました', 'success');
+      navigateTo('settings');
     }
   }
 }
@@ -1863,5 +1956,56 @@ async function registerSW() {
     } catch (e) {
       console.log('SW registration failed:', e);
     }
+  }
+}
+
+// ========================================
+// 持ち物チェックリスト ヘルパー
+// ========================================
+function toggleChecklistAccordion() {
+  const body = document.getElementById('checklist-body');
+  const arrow = document.getElementById('checklist-arrow');
+  if (!body || !arrow) return;
+
+  const isOpen = body.style.display === 'block';
+  if (isOpen) {
+    body.style.display = 'none';
+    arrow.style.transform = 'rotate(0deg)';
+    localStorage.setItem('checklist_open', '0');
+  } else {
+    body.style.display = 'block';
+    arrow.style.transform = 'rotate(90deg)';
+    localStorage.setItem('checklist_open', '1');
+  }
+}
+
+function toggleChecklistItem(checkbox) {
+  const item = checkbox.dataset.item;
+  let checkedItems = [];
+  try {
+    checkedItems = JSON.parse(localStorage.getItem('checklist_states') || '[]');
+  } catch (e) {
+    checkedItems = [];
+  }
+
+  if (checkbox.checked) {
+    if (!checkedItems.includes(item)) {
+      checkedItems.push(item);
+    }
+    checkbox.nextElementSibling.style.color = 'var(--text-muted)';
+    checkbox.nextElementSibling.style.textDecoration = 'line-through';
+  } else {
+    checkedItems = checkedItems.filter(i => i !== item);
+    checkbox.nextElementSibling.style.color = 'var(--text-primary)';
+    checkbox.nextElementSibling.style.textDecoration = 'none';
+  }
+
+  localStorage.setItem('checklist_states', JSON.stringify(checkedItems));
+
+  // バッジの進捗表示を更新
+  const badge = document.getElementById('checklist-progress-badge');
+  if (badge) {
+    const total = 16; // 16 items
+    badge.textContent = `${checkedItems.length}/${total}`;
   }
 }
