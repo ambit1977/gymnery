@@ -364,35 +364,142 @@ async function doEndSession() {
 // ========================================
 // マシン選択
 // ========================================
-function showMachineSelect() {
-  const cats = Object.keys(CATEGORIES);
+async function showMachineSelect() {
+  const catOrder = ['cardio', 'upper', 'lower', 'core', 'arm'];
+  
+  // 今日のセッションで実施済みのマシンIDを取得
+  const activeExs = activeSessionId ? await getExercisesBySession(activeSessionId) : [];
+  const completedMachineIds = new Set(activeExs.map(e => e.machineId));
+
   let html = `
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-md">
       <div class="modal-title" style="margin-bottom:0">マシン選択</div>
       <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
     </div>
+    <div style="max-height: 70vh; overflow-y: auto; padding-right: 4px;">
   `;
-  for (const cat of cats) {
+
+  const now = new Date();
+  let completedMachinesHtml = '';
+
+  for (const cat of catOrder) {
     const machines = getMachinesByCategory(cat);
-    html += `<div class="category-section">
-      <div class="category-header">
-        <span class="category-icon">${getCategoryIcon(cat)}</span>
-        <span class="category-label" style="color:${getCategoryColor(cat)}">${getCategoryLabel(cat)}</span>
-      </div>`;
-    for (const m of machines) {
-      html += `
-        <div class="machine-card" onclick="openExerciseInput('${m.id}')">
-          <div class="machine-icon" style="background:${getCategoryColor(cat)}22">${getCategoryIcon(cat)}</div>
-          <div class="machine-info">
-            <div class="machine-name">${m.name}</div>
-            ${m.altName ? `<div class="machine-meta">${m.altName}</div>` : ''}
-          </div>
-          <div class="machine-arrow">›</div>
+    let categoryHasActiveMachines = false;
+    
+    let categoryHtml = `
+      <div class="category-section" style="margin-bottom: var(--space-md);">
+        <div class="category-header" style="margin-bottom: var(--space-xs);">
+          <span class="category-icon">${getCategoryIcon(cat)}</span>
+          <span class="category-label" style="color:${getCategoryColor(cat)}; font-weight: bold;">${getCategoryLabel(cat)}</span>
         </div>`;
+
+    for (const m of machines) {
+      // 過去の記録から「中何日」を計算
+      const past = await getExercisesByMachine(m.id);
+      let daysStr = '初実施';
+      let badgeColor = 'var(--text-secondary)';
+      let badgeBg = 'var(--bg-elevated)';
+
+      if (past && past.length > 0) {
+        // 直近の実施日時
+        const lastDate = new Date(past[0].createdAt);
+        const diffTime = now - lastDate;
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays === 0) {
+          daysStr = '今日';
+        } else if (diffDays === 1) {
+          daysStr = '昨日';
+        } else {
+          daysStr = `中 ${diffDays} 日`;
+        }
+
+        // 回復ステータスと色の決定 (超回復理論)
+        if (cat === 'upper' || cat === 'arm') {
+          // 上半身・腕 (48時間 = 2日)
+          if (diffDays < 2) {
+            badgeColor = '#ff6b6b'; // 赤: 未回復
+          } else if (diffDays === 2) {
+            badgeColor = '#ffe66d'; // 黄: 回復中
+          } else {
+            badgeColor = '#4ecdc4'; // 緑: 回復済
+          }
+        } else if (cat === 'lower') {
+          // 下半身 (72時間 = 3日)
+          if (diffDays < 3) {
+            badgeColor = '#ff6b6b';
+          } else if (diffDays === 3) {
+            badgeColor = '#ffe66d';
+          } else {
+            badgeColor = '#4ecdc4';
+          }
+        } else if (cat === 'core') {
+          // 体幹 (24時間 = 1日)
+          if (diffDays < 1) {
+            badgeColor = '#ff6b6b';
+          } else if (diffDays === 1) {
+            badgeColor = '#ffe66d';
+          } else {
+            badgeColor = '#4ecdc4';
+          }
+        } else {
+          // 有酸素
+          badgeColor = '#4ecdc4';
+        }
+        badgeBg = `${badgeColor}15`;
+      } else {
+        // 初めて行う種目は緑で表示
+        badgeColor = '#4ecdc4';
+        badgeBg = `${badgeColor}15`;
+      }
+
+      const cardHtml = `
+        <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+          <div style="display: flex; align-items: center; gap: var(--space-sm);">
+            <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+            <div class="machine-info">
+              <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+              ${m.altName ? `<div class="machine-meta" style="font-size: 0.75rem; color: var(--text-secondary);">${m.altName}</div>` : ''}
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="badge" style="color: ${badgeColor}; background: ${badgeBg}; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+            <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
+          </div>
+        </div>
+      `;
+
+      if (completedMachineIds.has(m.id)) {
+        // 実施済み種目の場合
+        completedMachinesHtml += cardHtml.replace('machine-card"', 'machine-card" style="opacity: 0.5; filter: grayscale(50%);"');
+      } else {
+        categoryHtml += cardHtml;
+        categoryHasActiveMachines = true;
+      }
     }
-    html += `</div>`;
+    
+    categoryHtml += `</div>`;
+    
+    if (categoryHasActiveMachines) {
+      html += categoryHtml;
+    }
   }
+
+  // 実施済みセクションの追加
+  if (completedMachinesHtml) {
+    html += `
+      <div class="category-section" style="margin-top: var(--space-lg); border-top: 1px dashed var(--border-color); padding-top: var(--space-md);">
+        <div class="category-header" style="margin-bottom: var(--space-xs);">
+          <span class="category-icon">✅</span>
+          <span class="category-label" style="color: var(--text-secondary); font-weight: bold;">本日の実施済み種目</span>
+        </div>
+        ${completedMachinesHtml}
+      </div>
+    `;
+  }
+
+  html += `</div>`;
   showModal(html);
 }
 
@@ -949,9 +1056,36 @@ async function doAddPastSession() {
 // ========================================
 // 履歴画面
 // ========================================
-async function renderHistory(main) {
-  const sessions = await getAllSessions();
+let currentHistoryTab = 'sessions'; // 'sessions' or 'machines'
 
+async function renderHistory(main) {
+  // タブ切り替え用の共通レイアウト
+  main.innerHTML = `
+    <div class="page">
+      <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border: 1px solid var(--border-color);">
+        <button id="tab-sessions" class="btn btn-sm ${currentHistoryTab === 'sessions' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('sessions')" style="flex:1; border-radius:var(--radius-sm);">セッション履歴</button>
+        <button id="tab-machines" class="btn btn-sm ${currentHistoryTab === 'machines' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('machines')" style="flex:1; border-radius:var(--radius-sm);">種目履歴 (2週間)</button>
+      </div>
+      <div id="history-tab-content"></div>
+    </div>`;
+
+  if (currentHistoryTab === 'sessions') {
+    await renderSessionsTab(document.getElementById('history-tab-content'));
+  } else {
+    await renderMachinesTab(document.getElementById('history-tab-content'));
+  }
+}
+
+async function switchHistoryTab(tab) {
+  currentHistoryTab = tab;
+  const main = document.getElementById('main-content');
+  if (main) {
+    await renderHistory(main);
+  }
+}
+
+async function renderSessionsTab(container) {
+  const sessions = await getAllSessions();
   let calendarHtml = renderCalendar(new Date(), sessions);
   let listHtml = '';
 
@@ -962,30 +1096,114 @@ async function renderHistory(main) {
     const badges = cats.map(c => `<span class="badge badge-${c}">${getCategoryIcon(c)} ${getCategoryLabel(c)}</span>`).join('');
     const d = new Date(s.startTime);
     listHtml += `
-      <div class="history-item" onclick="showSessionDetail(${s.id})">
-        <div class="history-date">
-          <div class="history-day">${d.getDate()}</div>
-          <div class="history-month">${d.getMonth()+1}月</div>
-          <div class="history-dow">${getDayOfWeek(s.startTime)}</div>
+      <div class="history-item" onclick="showSessionDetail(${s.id})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
+        <div class="history-date" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50px; border-right: 1px solid var(--border-color); padding-right: 8px; margin-right: 12px;">
+          <div class="history-day" style="font-size: 1.25rem; font-weight: bold;">${d.getDate()}</div>
+          <div class="history-month" style="font-size: 0.7rem; color: var(--text-secondary);">${d.getMonth()+1}月</div>
+          <div class="history-dow" style="font-size: 0.65rem; color: var(--text-muted);">${getDayOfWeek(s.startTime)}</div>
         </div>
-        <div class="history-info">
-          <div class="history-title">${exs.length}種目${s.endTime ? ' · ' + getSessionDuration(s) : ''}</div>
-          <div class="history-badges">${badges}</div>
+        <div class="history-info" style="flex: 1;">
+          <div class="history-title" style="font-weight: bold; font-size: 0.95rem;">${exs.length}種目${s.endTime ? ' · ' + getSessionDuration(s) : ''}</div>
+          <div class="history-badges" style="display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px;">${badges}</div>
         </div>
-        <div class="machine-arrow">›</div>
+        <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
       </div>`;
   }
 
-  main.innerHTML = `
-    <div class="page">
-      <div id="calendar-container">${calendarHtml}</div>
-      <div class="flex gap-sm mb-lg">
-        <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">📥 全データエクスポート</button>
-        <button class="btn btn-primary btn-sm" onclick="showAddPastSession()" style="flex:1">＋ 手動追加</button>
+  container.innerHTML = `
+    <div id="calendar-container">${calendarHtml}</div>
+    <div class="flex gap-sm mb-lg">
+      <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">📥 全データエクスポート</button>
+      <button class="btn btn-primary btn-sm" onclick="showAddPastSession()" style="flex:1">＋ 手動追加</button>
+    </div>
+    <div class="section-title">全セッション</div>
+    ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}`;
+}
+
+async function renderMachinesTab(container) {
+  const now = new Date();
+  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+  
+  // すべてのエクササイズ履歴を取得
+  const exercises = await getAllExercises();
+  
+  // マシンIDごとの最終実施日をマッピング
+  const lastExecutionMap = new Map();
+  exercises.forEach(e => {
+    const date = new Date(e.createdAt);
+    if (!lastExecutionMap.has(e.machineId) || date > lastExecutionMap.get(e.machineId)) {
+      lastExecutionMap.set(e.machineId, date);
+    }
+  });
+
+  // 過去2週間以内に実施されたマシンを抽出＆古い順にソート
+  const machineHistory = [];
+  lastExecutionMap.forEach((lastDate, machineId) => {
+    if (lastDate >= twoWeeksAgo) {
+      const machine = getMachineById(machineId);
+      if (machine) {
+        machineHistory.push({
+          machine,
+          lastDate,
+        });
+      }
+    }
+  });
+
+  // 最終実施日が「古い順」にソート
+  machineHistory.sort((a, b) => a.lastDate - b.lastDate);
+
+  let listHtml = '';
+  for (const item of machineHistory) {
+    const m = item.machine;
+    const diffTime = now - item.lastDate;
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    
+    let daysStr = '';
+    let badgeColor = 'var(--text-secondary)';
+    
+    if (diffDays === 0) {
+      daysStr = '今日';
+    } else if (diffDays === 1) {
+      daysStr = '昨日';
+    } else {
+      daysStr = `中 ${diffDays} 日`;
+    }
+
+    // 回復度の色の計算
+    if (m.category === 'upper' || m.category === 'arm') {
+      badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
+    } else if (m.category === 'lower') {
+      badgeColor = diffDays < 3 ? '#ff6b6b' : (diffDays === 3 ? '#ffe66d' : '#4ecdc4');
+    } else if (m.category === 'core') {
+      badgeColor = diffDays < 1 ? '#ff6b6b' : (diffDays === 1 ? '#ffe66d' : '#4ecdc4');
+    } else {
+      badgeColor = '#4ecdc4';
+    }
+
+    listHtml += `
+      <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
+        <div style="display: flex; align-items: center; gap: var(--space-sm);">
+          <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+          <div class="machine-info">
+            <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+            <div class="machine-meta" style="font-size: 0.75rem; color: var(--text-secondary);">
+              最終実施: ${item.lastDate.getMonth() + 1}月${item.lastDate.getDate()}日 (${getDayOfWeek(item.lastDate.toISOString())})
+            </div>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="badge" style="color: ${badgeColor}; background: ${badgeColor}15; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+          <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
+        </div>
       </div>
-      <div class="section-title">全セッション</div>
-      ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}
-    </div>`;
+    `;
+  }
+
+  container.innerHTML = `
+    <div class="section-title">過去2週間の実施種目 (古い順)</div>
+    <p class="text-xs text-muted mb-md">しばらく実施していない種目から並んでいます。</p>
+    ${listHtml || '<div class="empty-state"><div class="empty-icon">🏋️</div><div class="empty-text">過去2週間に実施した種目がありません</div></div>'}`;
 }
 
 let calendarDate = new Date();
