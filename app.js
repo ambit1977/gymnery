@@ -33,6 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     localStorage.setItem('member_id', 'C-41');
   }
 
+  // Handle body composition URL parameters (Shortcut integration)
+  await handleUrlParamsImport();
+
   // Setup navigation
   document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => navigateTo(btn.dataset.page));
@@ -41,6 +44,39 @@ document.addEventListener('DOMContentLoaded', async () => {
   navigateTo('home');
   registerSW();
 });
+
+async function handleUrlParamsImport() {
+  const params = new URLSearchParams(window.location.search);
+  const weight = params.get('weight') || params.get('w');
+  const fat = params.get('fat') || params.get('f');
+  const muscle = params.get('muscle') || params.get('m');
+  const visceral = params.get('visceral') || params.get('v');
+  const bmi = params.get('bmi') || params.get('b');
+  const date = params.get('date') || params.get('d') || new Date().toISOString().split('T')[0];
+
+  if (weight || fat || muscle) {
+    const data = {
+      date,
+      weight: weight ? parseFloat(weight) : null,
+      bodyFat: fat ? parseFloat(fat) : null,
+      muscleMass: muscle ? parseFloat(muscle) : null,
+      bmi: bmi ? parseFloat(bmi) : null,
+      visceralFat: visceral ? parseFloat(visceral) : null,
+      note: 'Appleヘルスケア / ショートカット連携'
+    };
+
+    try {
+      await addBodyComposition(data);
+      showToast(`ヘルスケア連携: 体組成をインポートしました (体重: ${data.weight}kg) ✅`, 'success');
+      // クエリパラメータを消してURLをクリーンに保つ (リロードによる多重登録防止)
+      const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+    } catch (e) {
+      console.error('Shortcut import failed:', e);
+      showToast('ヘルスケア連携インポートに失敗しました', 'danger');
+    }
+  }
+}
 
 function navigateTo(page) {
   currentPage = page;
@@ -1830,6 +1866,22 @@ async function showBodyInput(existing = null) {
       <div class="modal-title" style="margin-bottom:0">${existing ? '体組成を編集' : '体組成を記録'}</div>
       <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
     </div>
+
+    <!-- スマートインポートエリア -->
+    <div id="body-smart-paste-area" style="border: 2px dashed var(--border-color); border-radius: var(--radius-md); padding: 16px; text-align: center; background: var(--bg-secondary); cursor: pointer; margin-bottom: var(--space-md); transition: 0.2s;" 
+         onpaste="handleBodySmartPaste(event)" onclick="document.getElementById('body-smart-file-input').click()">
+      <div id="body-paste-placeholder">
+        <span style="font-size: 1.5rem; display: block; margin-bottom: 4px;">📥</span>
+        <span style="font-size: 0.8rem; font-weight: bold; color: var(--text-primary); display: block;">Yolanda CSVテキスト・画像をペースト</span>
+        <span style="font-size: 0.7rem; color: var(--text-muted);">またはタップして画像ファイルを選択</span>
+      </div>
+      <div id="body-paste-spinner" style="display:none; flex-direction:column; align-items:center; gap: 8px;">
+        <div class="spinner" style="width: 24px; height: 24px; border: 3px solid var(--accent-glow); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+        <span style="font-size: 0.75rem; color: var(--accent);">画像をAI解析中...</span>
+      </div>
+      <input type="file" id="body-smart-file-input" accept="image/*" style="display:none" onchange="handleBodySmartFileInput(event)">
+    </div>
+
     <div class="input-group">
       <label class="input-label">日付</label>
       <input class="input" type="date" id="body-date" value="${existing?.date || today}">
@@ -1881,6 +1933,29 @@ async function showBodyInput(existing = null) {
       <button class="btn btn-primary" onclick="saveBodyComp(${existing?.id || 'null'})" style="flex:1">保存</button>
     </div>
   `);
+
+  // ドラッグ＆ドロップでの画像ファイル受け入れ対応
+  const dropZone = document.getElementById('body-smart-paste-area');
+  if (dropZone) {
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--accent)';
+      dropZone.style.background = 'var(--bg-card-hover)';
+    });
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.style.borderColor = 'var(--border-color)';
+      dropZone.style.background = 'var(--bg-secondary)';
+    });
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.style.borderColor = 'var(--border-color)';
+      dropZone.style.background = 'var(--bg-secondary)';
+      const files = e.dataTransfer.files;
+      if (files.length > 0 && files[0].type.startsWith('image/')) {
+        processBodySmartImage(files[0]);
+      }
+    });
+  }
 }
 
 async function saveBodyComp(existingId) {
@@ -1902,6 +1977,199 @@ async function saveBodyComp(existingId) {
   closeModal();
   showToast('体組成を記録しました ✅', 'success');
   navigateTo('body');
+}
+
+// ========================================
+// 体組成スマートインポート ハンドラ
+// ========================================
+function handleBodySmartPaste(event) {
+  event.preventDefault();
+  event.stopPropagation();
+  
+  const clipboardData = event.clipboardData || window.clipboardData;
+  if (!clipboardData) return;
+
+  // 1. 画像のペーストチェック
+  for (const item of clipboardData.items) {
+    if (item.type.indexOf('image') !== -1) {
+      const file = item.getAsFile();
+      processBodySmartImage(file);
+      return;
+    }
+  }
+
+  // 2. テキストのペーストチェック
+  const text = clipboardData.getData('text');
+  if (text) {
+    parseBodySmartText(text);
+  }
+}
+
+function handleBodySmartFileInput(event) {
+  const files = event.target.files;
+  if (files && files.length > 0) {
+    processBodySmartImage(files[0]);
+  }
+}
+
+// CSVテキスト等のパース
+function parseBodySmartText(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length === 0) return;
+
+  // カンマ、タブ、スペース区切りを対応
+  // Yolanda CSV の例: 
+  // 2026-07-07 11:39:03,57.65Kg,20.0,17.9%,16.6%,3,59.3%,53.1%,45.0Kg,2.4Kg,18.7%,1392kcal,46
+  // もしくはヘッダー付きで2行コピーされているケースも対応するため、数字っぽい行を探します。
+  let dataLine = '';
+  for (const line of lines) {
+    // 最初の列が日付形式っぽいか
+    if (/^\d{4}[-/]\d{2}[-/]\d{2}/.test(line)) {
+      dataLine = line;
+      break;
+    }
+  }
+
+  if (!dataLine) {
+    showToast('貼り付けられたテキストから有効な日付とデータ行が見つかりませんでした。', 'warning');
+    return;
+  }
+
+  const columns = dataLine.split(/[\t,]/).map(c => c.trim());
+  if (columns.length < 3) {
+    showToast('列数が足りません。カンマまたはタブ区切りの形式である必要があります。', 'warning');
+    return;
+  }
+
+  // 各種インデックス対応（Yolanda仕様: 0:時間, 1:体重, 2:BMI, 3:体脂肪率, 4:皮下脂肪, 5:内臓脂肪, 8:筋肉量）
+  // 単位を除外してパースする
+  const parseVal = (str) => {
+    if (!str) return null;
+    const clean = str.replace(/[Kk]g|%|kcal/g, '').trim();
+    const val = parseFloat(clean);
+    return isNaN(val) ? null : val;
+  };
+
+  const rawDate = columns[0].split(' ')[0]; // 日付部分のみ "YYYY-MM-DD"
+  const formattedDate = rawDate.replace(/\//g, '-');
+  
+  const weight = parseVal(columns[1]);
+  const bmi = parseVal(columns[2]);
+  const fat = parseVal(columns[3]);
+  const visceral = parseVal(columns[5]);
+  const muscle = parseVal(columns[8]); // 筋肉量 (45.0Kg など)
+
+  // フォームに適用
+  if (document.getElementById('body-date')) document.getElementById('body-date').value = formattedDate;
+  if (document.getElementById('body-weight')) document.getElementById('body-weight').value = weight || '';
+  if (document.getElementById('body-fat')) document.getElementById('body-fat').value = fat || '';
+  if (document.getElementById('body-muscle')) document.getElementById('body-muscle').value = muscle || '';
+  if (document.getElementById('body-bmi')) document.getElementById('body-bmi').value = bmi || '';
+  if (document.getElementById('body-visceral')) document.getElementById('body-visceral').value = visceral || '';
+
+  showToast('テキストからデータをパースして入力しました 📋', 'success');
+}
+
+// Yolanda画像OCRパース (Gemini API使用)
+async function processBodySmartImage(file) {
+  const apiKey = localStorage.getItem('gemini_api_key');
+  if (!apiKey) {
+    showToast('画像OCR機能を使用するには、「設定」タブで Gemini APIキー を登録してください。', 'warning');
+    return;
+  }
+
+  const placeholder = document.getElementById('body-paste-placeholder');
+  const spinner = document.getElementById('body-paste-spinner');
+  
+  if (placeholder && spinner) {
+    placeholder.style.display = 'none';
+    spinner.style.display = 'flex';
+  }
+
+  try {
+    // 1. 画像をBase64に変換
+    const base64Data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const base64 = reader.result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    // 2. Gemini APIリクエスト
+    const payload = {
+      contents: [{
+        parts: [
+          {
+            text: "Extract the following metrics from this body composition scale screenshot/share image: \n" +
+                  "- date (format: YYYY-MM-DD)\n" +
+                  "- weight (number in kg)\n" +
+                  "- bodyFat (percent number)\n" +
+                  "- muscleMass (number in kg)\n" +
+                  "- bmi (number)\n" +
+                  "- visceralFat (number)\n" +
+                  "Return ONLY a valid JSON object matching this schema, without markdown formatting or code blocks: \n" +
+                  "{\"date\": \"YYYY-MM-DD\", \"weight\": 57.65, \"bodyFat\": 17.9, \"muscleMass\": 45.0, \"bmi\": 20.0, \"visceralFat\": 3}"
+          },
+          {
+            inlineData: {
+              mimeType: file.type,
+              data: base64Data
+            }
+          }
+        ]
+      }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    };
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.error?.message || `HTTP error ${response.status}`);
+    }
+
+    const resJson = await response.json();
+    const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!textResult) {
+      throw new Error('AIの解析結果が空でした。');
+    }
+
+    const data = JSON.parse(textResult.trim());
+
+    // 3. 各フォームへのマッピング
+    if (data.date && document.getElementById('body-date')) document.getElementById('body-date').value = data.date.replace(/\//g, '-');
+    if (data.weight && document.getElementById('body-weight')) document.getElementById('body-weight').value = data.weight;
+    if (data.bodyFat && document.getElementById('body-fat')) document.getElementById('body-fat').value = data.bodyFat;
+    if (data.muscleMass && document.getElementById('body-muscle')) document.getElementById('body-muscle').value = data.muscleMass;
+    if (data.bmi && document.getElementById('body-bmi')) document.getElementById('body-bmi').value = data.bmi;
+    if (data.visceralFat !== undefined && document.getElementById('body-visceral')) document.getElementById('body-visceral').value = data.visceralFat;
+
+    showToast('画像をAI解析し、体組成データを入力しました 📸', 'success');
+
+  } catch (e) {
+    console.error('AI OCR parsing failed:', e);
+    showToast(`AI解析に失敗しました: ${e.message}`, 'danger');
+  } finally {
+    if (placeholder && spinner) {
+      placeholder.style.display = 'block';
+      spinner.style.display = 'none';
+    }
+    // file input を初期化
+    const fileInput = document.getElementById('body-smart-file-input');
+    if (fileInput) fileInput.value = '';
+  }
 }
 
 async function showBodyDetail(id) {
@@ -1970,6 +2238,15 @@ function renderSettings(main) {
       </div>
 
       <div class="card mb-md">
+        <div class="text-sm font-bold mb-sm">🔑 Gemini APIキー設定 (画像解析用)</div>
+        <p class="text-xs text-muted mb-md">Yolanda等の体組成シェア画像をOCR解析する際に使用します。キーはローカルにのみ保存されます。</p>
+        <div class="flex gap-sm">
+          <input type="password" class="input text-xs" id="setting-gemini-key" value="${localStorage.getItem('gemini_api_key') || ''}" placeholder="AIzaSy..." style="flex:2;">
+          <button class="btn btn-primary btn-sm" onclick="saveSettingGeminiKey()" style="flex:1;">保存</button>
+        </div>
+      </div>
+
+      <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">⚙️ マシン初期値設定</div>
         <p class="text-xs text-muted mb-md">各マシンのデフォルト重量や回数を設定します。</p>
         <button class="btn btn-secondary btn-sm btn-block" onclick="showMachineDefaults()">初期値を設定</button>
@@ -1999,7 +2276,7 @@ function renderSettings(main) {
 
   // Google Sheets カードをデータ入出力カードの直前に差し込む
   if (typeof gsheetsSettingsHtml === 'function') {
-    const dataCard = main.querySelector('.page .card:nth-child(4)');
+    const dataCard = main.querySelector('.page .card:nth-child(5)'); // Gemini追加に伴いインデックスが1つずれたので5に調整
     const sheetsDiv = document.createElement('div');
     sheetsDiv.innerHTML = gsheetsSettingsHtml();
     if (dataCard) {
@@ -2017,6 +2294,16 @@ function saveSettingMemberId() {
       showToast('会員番号を保存しました', 'success');
       navigateTo('settings');
     }
+  }
+}
+
+function saveSettingGeminiKey() {
+  const input = document.getElementById('setting-gemini-key');
+  if (input) {
+    const val = input.value.trim();
+    localStorage.setItem('gemini_api_key', val);
+    showToast('Gemini APIキーを保存しました', 'success');
+    navigateTo('settings');
   }
 }
 
