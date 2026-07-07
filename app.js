@@ -2013,36 +2013,10 @@ function handleBodySmartFileInput(event) {
 }
 
 // CSVテキスト等のパース
-function parseBodySmartText(text) {
+async function parseBodySmartText(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length === 0) return;
 
-  // カンマ、タブ、スペース区切りを対応
-  // Yolanda CSV の例: 
-  // 2026-07-07 11:39:03,57.65Kg,20.0,17.9%,16.6%,3,59.3%,53.1%,45.0Kg,2.4Kg,18.7%,1392kcal,46
-  // もしくはヘッダー付きで2行コピーされているケースも対応するため、数字っぽい行を探します。
-  let dataLine = '';
-  for (const line of lines) {
-    // 最初の列が日付形式っぽいか
-    if (/^\d{4}[-/]\d{2}[-/]\d{2}/.test(line)) {
-      dataLine = line;
-      break;
-    }
-  }
-
-  if (!dataLine) {
-    showToast('貼り付けられたテキストから有効な日付とデータ行が見つかりませんでした。', 'warning');
-    return;
-  }
-
-  const columns = dataLine.split(/[\t,]/).map(c => c.trim());
-  if (columns.length < 3) {
-    showToast('列数が足りません。カンマまたはタブ区切りの形式である必要があります。', 'warning');
-    return;
-  }
-
-  // 各種インデックス対応（Yolanda仕様: 0:時間, 1:体重, 2:BMI, 3:体脂肪率, 4:皮下脂肪, 5:内臓脂肪, 8:筋肉量）
-  // 単位を除外してパースする
   const parseVal = (str) => {
     if (!str) return null;
     const clean = str.replace(/[Kk]g|%|kcal/g, '').trim();
@@ -2050,34 +2024,69 @@ function parseBodySmartText(text) {
     return isNaN(val) ? null : val;
   };
 
-  const rawDate = columns[0].split(' ')[0]; // 日付部分のみ "YYYY-MM-DD"
-  const formattedDate = rawDate.replace(/\//g, '-');
-  
-  const weight = parseVal(columns[1]);
-  const bmi = parseVal(columns[2]);
-  const fat = parseVal(columns[3]);
-  const visceral = parseVal(columns[5]);
-  const muscle = parseVal(columns[8]); // 筋肉量 (45.0Kg など)
+  const parsedRecords = [];
 
-  // フォームに適用
-  if (document.getElementById('body-date')) document.getElementById('body-date').value = formattedDate;
-  if (document.getElementById('body-weight')) document.getElementById('body-weight').value = weight || '';
-  if (document.getElementById('body-fat')) document.getElementById('body-fat').value = fat || '';
-  if (document.getElementById('body-muscle')) document.getElementById('body-muscle').value = muscle || '';
-  if (document.getElementById('body-bmi')) document.getElementById('body-bmi').value = bmi || '';
-  if (document.getElementById('body-visceral')) document.getElementById('body-visceral').value = visceral || '';
+  for (const line of lines) {
+    // 最初の列が日付形式っぽいか確認
+    if (/^\d{4}[-/]\d{2}[-/]\d{2}/.test(line)) {
+      const columns = line.split(/[\t,]/).map(c => c.trim());
+      if (columns.length >= 3) {
+        const rawDate = columns[0].split(' ')[0]; // 日付部分のみ
+        const formattedDate = rawDate.replace(/\//g, '-');
+        
+        const weight = parseVal(columns[1]);
+        const bmi = parseVal(columns[2]);
+        const fat = parseVal(columns[3]);
+        const visceral = parseVal(columns[5]);
+        const muscle = parseVal(columns[8]);
 
-  showToast('テキストからデータをパースして入力しました 📋', 'success');
-}
+        parsedRecords.push({
+          date: formattedDate,
+          weight,
+          bodyFat: fat,
+          muscleMass: muscle,
+          bmi,
+          visceralFat: visceral,
+          note: 'CSVインポート'
+        });
+      }
+    }
+  }
 
-// Yolanda画像OCRパース (Gemini API使用)
-async function processBodySmartImage(file) {
-  const apiKey = localStorage.getItem('gemini_api_key');
-  if (!apiKey) {
-    showToast('画像OCR機能を使用するには、「設定」タブで Gemini APIキー を登録してください。', 'warning');
+  if (parsedRecords.length === 0) {
+    showToast('貼り付けられたテキストから有効なデータ行が見つかりませんでした。', 'warning');
     return;
   }
 
+  if (parsedRecords.length === 1) {
+    // 1行のみの場合は入力フォームに入力値をセット
+    const data = parsedRecords[0];
+    if (document.getElementById('body-date')) document.getElementById('body-date').value = data.date;
+    if (document.getElementById('body-weight')) document.getElementById('body-weight').value = data.weight || '';
+    if (document.getElementById('body-fat')) document.getElementById('body-fat').value = data.bodyFat || '';
+    if (document.getElementById('body-muscle')) document.getElementById('body-muscle').value = data.muscleMass || '';
+    if (document.getElementById('body-bmi')) document.getElementById('body-bmi').value = data.bmi || '';
+    if (document.getElementById('body-visceral')) document.getElementById('body-visceral').value = data.visceralFat || '';
+
+    showToast('テキストからデータをパースして入力しました 📋', 'success');
+  } else {
+    // 複数行の場合は一括保存
+    try {
+      for (const rec of parsedRecords) {
+        await addBodyComposition(rec);
+      }
+      closeModal();
+      showToast(`${parsedRecords.length}件の体組成データを一括インポートしました 📋`, 'success');
+      navigateTo('body');
+    } catch (e) {
+      console.error(e);
+      showToast('一括インポート中にエラーが発生しました', 'danger');
+    }
+  }
+}
+
+// Yolanda画像OCRパース (Tesseract.js による完全ブラウザ側ローカルOCR)
+async function processBodySmartImage(file) {
   const placeholder = document.getElementById('body-paste-placeholder');
   const spinner = document.getElementById('body-paste-spinner');
   
@@ -2087,80 +2096,64 @@ async function processBodySmartImage(file) {
   }
 
   try {
-    // 1. 画像をBase64に変換
-    const base64Data = await new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const base64 = reader.result.split(',')[1];
-        resolve(base64);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
+    // 1. Tesseract.js の動的ロード
+    if (typeof Tesseract === 'undefined') {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/tesseract.js@5.1.0/dist/tesseract.min.js';
+        script.onload = resolve;
+        script.onerror = () => reject(new Error('Tesseract.js のロードに失敗しました。インターネット接続を確認してください。'));
+        document.head.appendChild(script);
+      });
+    }
+
+    // 2. ローカルでのOCR実行
+    const result = await Tesseract.recognize(file, 'eng+jpn', {
+      logger: m => console.log('OCR Progress:', m.status, Math.round(m.progress * 100) + '%')
     });
 
-    // 2. Gemini APIリクエスト
-    const payload = {
-      contents: [{
-        parts: [
-          {
-            text: "Extract the following metrics from this body composition scale screenshot/share image: \n" +
-                  "- date (format: YYYY-MM-DD)\n" +
-                  "- weight (number in kg)\n" +
-                  "- bodyFat (percent number)\n" +
-                  "- muscleMass (number in kg)\n" +
-                  "- bmi (number)\n" +
-                  "- visceralFat (number)\n" +
-                  "Return ONLY a valid JSON object matching this schema, without markdown formatting or code blocks: \n" +
-                  "{\"date\": \"YYYY-MM-DD\", \"weight\": 57.65, \"bodyFat\": 17.9, \"muscleMass\": 45.0, \"bmi\": 20.0, \"visceralFat\": 3}"
-          },
-          {
-            inlineData: {
-              mimeType: file.type,
-              data: base64Data
-            }
-          }
-        ]
-      }],
-      generationConfig: {
-        responseMimeType: "application/json"
+    const text = result.data.text || '';
+    console.log('OCR Parsed Text:\n', text);
+
+    // 3. 正規表現で数値を抽出（日本語・英語ラベル両対応）
+    const extractNum = (patterns) => {
+      for (const pattern of patterns) {
+        const match = text.match(pattern);
+        if (match && match[1]) {
+          const val = parseFloat(match[1]);
+          if (!isNaN(val)) return val;
+        }
       }
+      return null;
     };
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    if (!response.ok) {
-      const errJson = await response.json().catch(() => ({}));
-      throw new Error(errJson.error?.message || `HTTP error ${response.status}`);
-    }
-
-    const resJson = await response.json();
-    const textResult = resJson.candidates?.[0]?.content?.parts?.[0]?.text;
+    // Yolandaの表示ラベルに基づいた正規表現パターン
+    const weight = extractNum([/(?:体重|Weight|Weigh)\s*([\d\.]+)/i, /([\d\.]+)kg/i]);
+    const bmi = extractNum([/(?:BMI)\s*([\d\.]+)/i]);
+    const fat = extractNum([/(?:体脂肪率|Body\s*Fat|Fat)\s*([\d\.]+)/i, /([\d\.]+)%/]);
+    const muscle = extractNum([/(?:筋肉量|Muscle\s*Mass|Muscle)\s*([\d\.]+)/i]);
+    const visceral = extractNum([/(?:内臓脂肪|Visceral\s*Fat|Visceral)\s*(\d+)/i]);
     
-    if (!textResult) {
-      throw new Error('AIの解析結果が空でした。');
+    // 日付の抽出 (例: 2026/07/07)
+    let date = new Date().toISOString().split('T')[0];
+    const dateMatch = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
+    if (dateMatch) {
+      date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
     }
 
-    const data = JSON.parse(textResult.trim());
+    // 4. 各フォームへのマッピング
+    if (document.getElementById('body-date')) document.getElementById('body-date').value = date;
+    if (weight !== null && document.getElementById('body-weight')) document.getElementById('body-weight').value = weight;
+    if (fat !== null && document.getElementById('body-fat')) document.getElementById('body-fat').value = fat;
+    if (muscle !== null && document.getElementById('body-muscle')) document.getElementById('body-muscle').value = muscle;
+    if (bmi !== null && document.getElementById('body-bmi')) document.getElementById('body-bmi').value = bmi;
+    if (visceral !== null && document.getElementById('body-visceral')) document.getElementById('body-visceral').value = visceral;
 
-    // 3. 各フォームへのマッピング
-    if (data.date && document.getElementById('body-date')) document.getElementById('body-date').value = data.date.replace(/\//g, '-');
-    if (data.weight && document.getElementById('body-weight')) document.getElementById('body-weight').value = data.weight;
-    if (data.bodyFat && document.getElementById('body-fat')) document.getElementById('body-fat').value = data.bodyFat;
-    if (data.muscleMass && document.getElementById('body-muscle')) document.getElementById('body-muscle').value = data.muscleMass;
-    if (data.bmi && document.getElementById('body-bmi')) document.getElementById('body-bmi').value = data.bmi;
-    if (data.visceralFat !== undefined && document.getElementById('body-visceral')) document.getElementById('body-visceral').value = data.visceralFat;
-
-    showToast('画像をAI解析し、体組成データを入力しました 📸', 'success');
+    showToast('画像を解析し、体組成データを入力しました 📸', 'success');
 
   } catch (e) {
-    console.error('AI OCR parsing failed:', e);
-    showToast(`AI解析に失敗しました: ${e.message}`, 'danger');
+    console.error('Local OCR parsing failed:', e);
+    showToast(`画像解析に失敗しました: ${e.message}`, 'danger');
   } finally {
     if (placeholder && spinner) {
       placeholder.style.display = 'block';
@@ -2238,15 +2231,6 @@ function renderSettings(main) {
       </div>
 
       <div class="card mb-md">
-        <div class="text-sm font-bold mb-sm">🔑 Gemini APIキー設定 (画像解析用)</div>
-        <p class="text-xs text-muted mb-md">Yolanda等の体組成シェア画像をOCR解析する際に使用します。キーはローカルにのみ保存されます。</p>
-        <div class="flex gap-sm">
-          <input type="password" class="input text-xs" id="setting-gemini-key" value="${localStorage.getItem('gemini_api_key') || ''}" placeholder="AIzaSy..." style="flex:2;">
-          <button class="btn btn-primary btn-sm" onclick="saveSettingGeminiKey()" style="flex:1;">保存</button>
-        </div>
-      </div>
-
-      <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">⚙️ マシン初期値設定</div>
         <p class="text-xs text-muted mb-md">各マシンのデフォルト重量や回数を設定します。</p>
         <button class="btn btn-secondary btn-sm btn-block" onclick="showMachineDefaults()">初期値を設定</button>
@@ -2276,7 +2260,7 @@ function renderSettings(main) {
 
   // Google Sheets カードをデータ入出力カードの直前に差し込む
   if (typeof gsheetsSettingsHtml === 'function') {
-    const dataCard = main.querySelector('.page .card:nth-child(5)'); // Gemini追加に伴いインデックスが1つずれたので5に調整
+    const dataCard = main.querySelector('.page .card:nth-child(4)'); // 元の4に戻す
     const sheetsDiv = document.createElement('div');
     sheetsDiv.innerHTML = gsheetsSettingsHtml();
     if (dataCard) {
@@ -2294,16 +2278,6 @@ function saveSettingMemberId() {
       showToast('会員番号を保存しました', 'success');
       navigateTo('settings');
     }
-  }
-}
-
-function saveSettingGeminiKey() {
-  const input = document.getElementById('setting-gemini-key');
-  if (input) {
-    const val = input.value.trim();
-    localStorage.setItem('gemini_api_key', val);
-    showToast('Gemini APIキーを保存しました', 'success');
-    navigateTo('settings');
   }
 }
 
