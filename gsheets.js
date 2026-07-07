@@ -533,3 +533,84 @@ async function gsheetsMaybeAutoSync() {
     console.warn('Auto sync failed:', e.message);
   }
 }
+
+// スプレッドシートから特定のセッションとそれに紐づく種目の行を削除する
+async function gsheetsDeleteSessionAndExercises(sessionId) {
+  const spreadsheetId = localStorage.getItem('gs_spreadsheet_id');
+  if (!spreadsheetId) return;
+
+  try {
+    // 1. 各種シートのIDとインデックスの対応マップを取得
+    const meta = await sheetsRequest('GET', `/${spreadsheetId}?fields=sheets`);
+    const sheetMap = {};
+    meta.sheets.forEach(s => {
+      sheetMap[s.properties.title] = s.properties.sheetId;
+    });
+
+    const requests = [];
+
+    // --- sessions シートの行検索 ---
+    const sessionRows = await gsheetFetchAllRows(spreadsheetId, 'sessions');
+    const sessionIdxToDelete = [];
+    sessionRows.forEach((row, idx) => {
+      if (String(row[0]) === String(sessionId)) {
+        // スプレッドシートの行は 1-indexed でヘッダがあるため、データ配列の idx に対する行番号は `idx + 2`
+        // deleteDimensionで使うインデックスは 0-indexed なので、行番号-1 = `idx + 1` となります。
+        sessionIdxToDelete.push(idx + 1);
+      }
+    });
+
+    // --- exercises シートの行検索 ---
+    const exerciseRows = await gsheetFetchAllRows(spreadsheetId, 'exercises');
+    const exerciseIdxToDelete = [];
+    exerciseRows.forEach((row, idx) => {
+      if (String(row[1]) === String(sessionId)) {
+        exerciseIdxToDelete.push(idx + 1);
+      }
+    });
+
+    // 行がズレないよう、インデックスの降順に削除リクエストを作成します。
+    // まず exercises から削除
+    if (exerciseIdxToDelete.length > 0 && sheetMap['exercises'] !== undefined) {
+      exerciseIdxToDelete.sort((a, b) => b - a);
+      exerciseIdxToDelete.forEach(rowIdx => {
+        requests.push({
+          deleteDimension: {
+            range: {
+              sheetId: sheetMap['exercises'],
+              dimension: 'ROWS',
+              startIndex: rowIdx,
+              endIndex: rowIdx + 1
+            }
+          }
+        });
+      });
+    }
+
+    // 次に sessions を削除
+    if (sessionIdxToDelete.length > 0 && sheetMap['sessions'] !== undefined) {
+      sessionIdxToDelete.sort((a, b) => b - a);
+      sessionIdxToDelete.forEach(rowIdx => {
+        requests.push({
+          deleteDimension: {
+            range: {
+              sheetId: sheetMap['sessions'],
+              dimension: 'ROWS',
+              startIndex: rowIdx,
+              endIndex: rowIdx + 1
+            }
+          }
+        });
+      });
+    }
+
+    // 削除リクエストの一括実行
+    if (requests.length > 0) {
+      await sheetsRequest('POST', `/${spreadsheetId}:batchUpdate`, { requests });
+      showToast('スプレッドシート側も削除同期しました ☁️', 'success');
+    }
+  } catch (e) {
+    console.error('Failed to delete rows from Google Sheets:', e);
+    showToast(`Google Sheetsでの削除同期に失敗しました: ${e.message}`, 'danger');
+  }
+}

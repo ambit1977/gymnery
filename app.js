@@ -433,9 +433,30 @@ async function doEndSession() {
   }
 }
 
+// 直近3回の成長履歴（UP/STAY）バッジを取得するヘルパー関数
+async function getPastThreeGrowthBadgesHtml(machineId) {
+  const past = await getExercisesByMachine(machineId);
+  if (!past || past.length === 0) return '';
+  
+  // 直近の最大3回分を取得して逆順（古い順）に並べる
+  const recent = past.slice(0, 3).reverse();
+  const badges = recent.map(ex => {
+    if (!ex.saveMode) return '';
+    const isOk = ex.saveMode === 'ok';
+    const color = isOk ? '#4ecdc4' : 'var(--text-secondary)';
+    const text = isOk ? 'UP↑' : '維持→';
+    return `<span class="badge" style="color:${color}; background:${color}15; border:1px solid ${color}33; font-size:0.6rem; padding:1px 4px; border-radius:4px; font-weight:bold; font-family:var(--font-primary);">${text}</span>`;
+  }).filter(b => b !== '').join(' ');
+
+  return badges ? `<div style="display:flex; gap:3px; margin-top:2px;">${badges}</div>` : '';
+}
+
 // ========================================
 // マシン選択
 // ========================================
+let currentMachineViewMode = 'recommended'; // 'recommended' or 'category'
+let currentMachineSortOrder = 'newest';    // 'newest' or 'oldest'
+
 async function showMachineSelect() {
   const catOrder = ['cardio', 'upper', 'lower', 'core', 'arm'];
   
@@ -443,118 +464,207 @@ async function showMachineSelect() {
   const activeExs = activeSessionId ? await getExercisesBySession(activeSessionId) : [];
   const completedMachineIds = new Set(activeExs.map(e => e.machineId));
 
+  const now = new Date();
+
+  // モーダルの基本構造を出力
   let html = `
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-md">
       <div class="modal-title" style="margin-bottom:0">マシン選択</div>
       <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
     </div>
-    <div style="max-height: 70vh; overflow-y: auto; padding-right: 4px;">
+    
+    <!-- タブ切り替えバー -->
+    <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border-color);">
+      <button class="btn btn-sm ${currentMachineViewMode === 'recommended' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('recommended')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">今日おすすめ (回復済)</button>
+      <button class="btn btn-sm ${currentMachineViewMode === 'category' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('category')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">部位別</button>
+    </div>
   `;
 
-  const now = new Date();
+  // 「今日おすすめ」モードの時のみソート切り替えボタンを表示
+  if (currentMachineViewMode === 'recommended') {
+    html += `
+      <div class="flex items-center justify-between mb-sm" style="padding: 0 4px;">
+        <span class="text-xs text-muted">過去に実施した回復済みの種目</span>
+        <button class="btn btn-secondary btn-sm" onclick="toggleMachineSortOrder()" style="padding:4px 8px; font-size:0.75rem; border-radius:var(--radius-sm); font-weight:bold;">
+          ${currentMachineSortOrder === 'newest' ? '📅 新しい順 ⬇' : '📅 古い順 ⬆'}
+        </button>
+      </div>
+    `;
+  }
+
+  html += `<div style="max-height: 55vh; overflow-y: auto; padding-right: 4px;">`;
+
   let completedMachinesHtml = '';
 
-  for (const cat of catOrder) {
-    const machines = getMachinesByCategory(cat);
-    let categoryHasActiveMachines = false;
-    
-    let categoryHtml = `
-      <div class="category-section" style="margin-bottom: var(--space-md);">
-        <div class="category-header" style="margin-bottom: var(--space-xs);">
-          <span class="category-icon">${getCategoryIcon(cat)}</span>
-          <span class="category-label" style="color:${getCategoryColor(cat)}; font-weight: bold;">${getCategoryLabel(cat)}</span>
-        </div>`;
+  if (currentMachineViewMode === 'recommended') {
+    // === 今日おすすめ（回復済＆過去に実施したことのある種目）ビュー ===
+    const recommendedList = [];
 
-    for (const m of machines) {
-      // 過去の記録から「中何日」を計算
-      const past = await getExercisesByMachine(m.id);
-      let daysStr = '初実施';
-      let badgeColor = 'var(--text-secondary)';
-      let badgeBg = 'var(--bg-elevated)';
-
-      if (past && past.length > 0) {
-        // 直近の実施日時
-        const lastDate = new Date(past[0].createdAt);
-        const diffTime = now - lastDate;
-        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    for (const m of MACHINES) {
+      // 実施済みのものは除外
+      if (completedMachineIds.has(m.id)) {
+        const past = await getExercisesByMachine(m.id);
+        const lastDate = past && past.length > 0 ? new Date(past[0].createdAt) : null;
+        const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
         
-        if (diffDays === 0) {
-          daysStr = '今日';
-        } else if (diffDays === 1) {
-          daysStr = '昨日';
-        } else {
-          daysStr = `中 ${diffDays} 日`;
-        }
-
-        // 回復ステータスと色の決定 (超回復理論)
-        if (cat === 'upper' || cat === 'arm') {
-          // 上半身・腕 (48時間 = 2日)
-          if (diffDays < 2) {
-            badgeColor = '#ff6b6b'; // 赤: 未回復
-          } else if (diffDays === 2) {
-            badgeColor = '#ffe66d'; // 黄: 回復中
-          } else {
-            badgeColor = '#4ecdc4'; // 緑: 回復済
-          }
-        } else if (cat === 'lower') {
-          // 下半身 (72時間 = 3日)
-          if (diffDays < 3) {
-            badgeColor = '#ff6b6b';
-          } else if (diffDays === 3) {
-            badgeColor = '#ffe66d';
-          } else {
-            badgeColor = '#4ecdc4';
-          }
-        } else if (cat === 'core') {
-          // 体幹 (24時間 = 1日)
-          if (diffDays < 1) {
-            badgeColor = '#ff6b6b';
-          } else if (diffDays === 1) {
-            badgeColor = '#ffe66d';
-          } else {
-            badgeColor = '#4ecdc4';
-          }
-        } else {
-          // 有酸素
-          badgeColor = '#4ecdc4';
-        }
-        badgeBg = `${badgeColor}15`;
-      } else {
-        // 初めて行う種目は緑で表示
-        badgeColor = '#4ecdc4';
-        badgeBg = `${badgeColor}15`;
-      }
-
-      const cardHtml = `
-        <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
-          <div style="display: flex; align-items: center; gap: var(--space-sm);">
-            <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
-            <div class="machine-info">
-              <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
-              ${m.altName ? `<div class="machine-meta" style="font-size: 0.75rem; color: var(--text-secondary);">${m.altName}</div>` : ''}
+        let daysStr = '今日';
+        const cardHtml = `
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+              <div class="machine-info">
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                ${badgesHtml}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border-color); font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+              <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
             </div>
           </div>
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span class="badge" style="color: ${badgeColor}; background: ${badgeBg}; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
-            <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
-          </div>
-        </div>
-      `;
+        `;
+        completedMachinesHtml += cardHtml;
+        continue;
+      }
 
-      if (completedMachineIds.has(m.id)) {
-        // 実施済み種目の場合
-        completedMachinesHtml += cardHtml.replace('machine-card"', 'machine-card" style="opacity: 0.5; filter: grayscale(50%);"');
+      const past = await getExercisesByMachine(m.id);
+      if (!past || past.length === 0) continue; // 過去に一度もやったことがないものはここには出さない（部位別で選ぶ）
+
+      const lastDate = new Date(past[0].createdAt);
+      const diffTime = now - lastDate;
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+      // 回復判定
+      let isRecovered = false;
+      let badgeColor = '#4ecdc4';
+
+      if (m.category === 'upper' || m.category === 'arm') {
+        isRecovered = diffDays >= 2;
+        badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
+      } else if (m.category === 'lower') {
+        isRecovered = diffDays >= 3;
+        badgeColor = diffDays < 3 ? '#ff6b6b' : (diffDays === 3 ? '#ffe66d' : '#4ecdc4');
+      } else if (m.category === 'core') {
+        isRecovered = diffDays >= 1;
+        badgeColor = diffDays < 1 ? '#ff6b6b' : (diffDays === 1 ? '#ffe66d' : '#4ecdc4');
       } else {
-        categoryHtml += cardHtml;
-        categoryHasActiveMachines = true;
+        isRecovered = true; // 有酸素は常に回復扱い
+      }
+
+      if (isRecovered) {
+        recommendedList.push({
+          machine: m,
+          lastDate,
+          diffDays,
+          badgeColor
+        });
       }
     }
-    
-    categoryHtml += `</div>`;
-    
-    if (categoryHasActiveMachines) {
-      html += categoryHtml;
+
+    // ソート処理
+    if (currentMachineSortOrder === 'newest') {
+      recommendedList.sort((a, b) => b.lastDate - a.lastDate); // 新しい順
+    } else {
+      recommendedList.sort((a, b) => a.lastDate - b.lastDate); // 古い順
+    }
+
+    if (recommendedList.length > 0) {
+      for (const item of recommendedList) {
+        const m = item.machine;
+        const daysStr = item.diffDays === 0 ? '今日' : (item.diffDays === 1 ? '昨日' : `中 ${item.diffDays} 日`);
+        const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
+
+        html += `
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+              <div class="machine-info">
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                ${badgesHtml}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="color: ${item.badgeColor}; background: ${item.badgeColor}15; border: 1px solid ${item.badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+              <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
+            </div>
+          </div>
+        `;
+      }
+    } else {
+      html += `
+        <div class="empty-state" style="padding: 24px 16px;">
+          <div class="empty-icon" style="font-size:2rem; margin-bottom:8px;">🥗</div>
+          <div class="empty-text" style="font-size:0.85rem;">本日おすすめ（回復済み）の過去実施種目はありません。部位別から選択してください。</div>
+        </div>
+      `;
+    }
+
+  } else {
+    // === 部位別（カテゴリ）ビュー (従来の表示順) ===
+    for (const cat of catOrder) {
+      const machines = getMachinesByCategory(cat);
+      let categoryHasActiveMachines = false;
+      
+      let categoryHtml = `
+        <div class="category-section" style="margin-bottom: var(--space-md);">
+          <div class="category-header" style="margin-bottom: var(--space-xs);">
+            <span class="category-icon">${getCategoryIcon(cat)}</span>
+            <span class="category-label" style="color:${getCategoryColor(cat)}; font-weight: bold;">${getCategoryLabel(cat)}</span>
+          </div>`;
+
+      for (const m of machines) {
+        const past = await getExercisesByMachine(m.id);
+        const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
+        let daysStr = '初実施';
+        let badgeColor = '#4ecdc4';
+        let badgeBg = '#4ecdc415';
+
+        if (past && past.length > 0) {
+          const lastDate = new Date(past[0].createdAt);
+          const diffTime = now - lastDate;
+          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          
+          daysStr = diffDays === 0 ? '今日' : (diffDays === 1 ? '昨日' : `中 ${diffDays} 日`);
+
+          if (cat === 'upper' || cat === 'arm') {
+            badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
+          } else if (cat === 'lower') {
+            badgeColor = diffDays < 3 ? '#ff6b6b' : (diffDays === 3 ? '#ffe66d' : '#4ecdc4');
+          } else if (cat === 'core') {
+            badgeColor = diffDays < 1 ? '#ff6b6b' : (diffDays === 1 ? '#ffe66d' : '#4ecdc4');
+          }
+          badgeBg = `${badgeColor}15`;
+        }
+
+        const cardHtml = `
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+            <div style="display: flex; align-items: center; gap: var(--space-sm);">
+              <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+              <div class="machine-info">
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                ${badgesHtml}
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span class="badge" style="color: ${badgeColor}; background: ${badgeBg}; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+              <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
+            </div>
+          </div>
+        `;
+
+        if (completedMachineIds.has(m.id)) {
+          completedMachinesHtml += cardHtml.replace('machine-card"', 'machine-card" style="opacity: 0.5; filter: grayscale(50%);"');
+        } else {
+          categoryHtml += cardHtml;
+          categoryHasActiveMachines = true;
+        }
+      }
+      
+      categoryHtml += `</div>`;
+      if (categoryHasActiveMachines) {
+        html += categoryHtml;
+      }
     }
   }
 
@@ -573,6 +683,18 @@ async function showMachineSelect() {
 
   html += `</div>`;
   showModal(html);
+}
+
+// ビューモード切り替えハンドラ
+function changeMachineViewMode(mode) {
+  currentMachineViewMode = mode;
+  showMachineSelect();
+}
+
+// ソート切り替えハンドラ
+function toggleMachineSortOrder() {
+  currentMachineSortOrder = currentMachineSortOrder === 'newest' ? 'oldest' : 'newest';
+  showMachineSelect();
 }
 
 // ========================================
@@ -827,16 +949,28 @@ function startIntervalTimer(machineId) {
   intervalTimerEndTime = Date.now() + 60 * 1000;
   if (intervalTimerId) clearInterval(intervalTimerId);
   
+  let hasTriggeredEnd = false;
+  
   const updateDisplay = () => {
     const remainMs = intervalTimerEndTime - Date.now();
+    
     if (remainMs <= 0) {
-      clearInterval(intervalTimerId);
-      display.textContent = "00:00";
+      // タイムアップ時（最初の一度だけアラートと行追加を実行）
+      if (!hasTriggeredEnd) {
+        hasTriggeredEnd = true;
+        if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+        addSetRow(machineId);
+      }
+      
+      // カウントアップ表示
       display.className = 'timer-danger';
-      if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
-      addSetRow(machineId);
+      const elapsedMs = Math.abs(remainMs);
+      const eM = Math.floor(elapsedMs / 60000);
+      const eS = Math.floor((elapsedMs % 60000) / 1000);
+      display.textContent = `+${String(eM).padStart(2,'0')}:${String(eS).padStart(2,'0')}`;
       return;
     }
+    
     const rM = Math.floor(remainMs / 60000);
     const rS = Math.floor((remainMs % 60000) / 1000);
     display.textContent = `${String(rM).padStart(2,'0')}:${String(rS).padStart(2,'0')}`;
@@ -999,10 +1133,23 @@ async function doDeleteExercise(exerciseId, sessionId) {
 }
 
 function confirmDeleteSession(sessionId) {
+  const isLinked = localStorage.getItem('gs_spreadsheet_id') && localStorage.getItem('gs_authed') === '1';
+  let sheetsOptionHtml = '';
+  
+  if (isLinked) {
+    sheetsOptionHtml = `
+      <label class="flex items-center gap-xs mt-md mb-xs" style="cursor: pointer; user-select: none; font-size: 0.85rem;">
+        <input type="checkbox" id="delete-from-sheets-checkbox" checked style="width: 16px; height: 16px; accent-color: var(--danger);">
+        <span style="color: var(--text-secondary);">☁️ Googleスプレッドシートからも削除する</span>
+      </label>
+    `;
+  }
+
   showModal(`
     <div class="modal-handle"></div>
     <div class="modal-title">このセッションを削除しますか？</div>
     <p class="text-sm text-muted">関連するすべての記録も削除されます。</p>
+    ${sheetsOptionHtml}
     <div class="flex gap-sm mt-lg">
       <button class="btn btn-secondary" onclick="closeModal()" style="flex:1">キャンセル</button>
       <button class="btn btn-danger" onclick="doDeleteSession(${sessionId})" style="flex:1">削除</button>
@@ -1010,6 +1157,8 @@ function confirmDeleteSession(sessionId) {
 }
 
 async function doDeleteSession(sessionId) {
+  const deleteFromSheets = document.getElementById('delete-from-sheets-checkbox')?.checked;
+
   if (sessionId === activeSessionId) {
     activeSessionId = null;
     localStorage.removeItem('activeSessionId');
@@ -1019,6 +1168,11 @@ async function doDeleteSession(sessionId) {
   closeModal();
   showToast('セッションを削除しました', 'success');
   navigateTo('history');
+
+  // Google Sheetsの削除連携を実行
+  if (deleteFromSheets && typeof gsheetsDeleteSessionAndExercises === 'function') {
+    gsheetsDeleteSessionAndExercises(sessionId).catch(e => console.error('Delete sync failed:', e));
+  }
 }
 
 async function editSessionTimes(sessionId) {
@@ -1387,11 +1541,21 @@ async function renderStats(main) {
       </div>
 
       ${strengthMachines.length > 0 ? `
-      <div class="section-title">重量推移</div>
-      <div class="input-group">
-        <select class="input input-sm" id="stats-machine-select" onchange="renderWeightChart()">
-          ${machineOptions}
-        </select>
+      <div class="section-title">重量推移 (複数選択可)</div>
+      <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px; max-height: 150px; overflow-y: auto;">
+        ${strengthMachines.map((id, idx) => {
+          const m = getMachineById(id);
+          if (!m) return '';
+          // 最初の一つをデフォルトチェックする
+          const checked = idx === 0 ? 'checked' : '';
+          return `
+            <label class="flex items-center gap-xs py-xs" style="cursor: pointer; user-select: none; font-size: 0.85rem;">
+              <input type="checkbox" class="stats-machine-checkbox" value="${id}" ${checked} onchange="renderWeightChart()" style="width:16px; height:16px; accent-color: var(--accent);">
+              <span style="color:${getCategoryColor(m.category)}">${getCategoryIcon(m.category)}</span>
+              <span>${m.name}</span>
+            </label>
+          `;
+        }).join('')}
       </div>
       <div class="chart-container">
         <div class="chart-wrapper"><canvas id="weight-chart"></canvas></div>
@@ -1410,43 +1574,107 @@ async function renderStats(main) {
 }
 
 async function renderWeightChart() {
-  const select = document.getElementById('stats-machine-select');
-  if (!select) return;
-  const machineId = select.value;
-  const exercises = await getExercisesByMachine(machineId);
+  const checkboxes = document.querySelectorAll('.stats-machine-checkbox:checked');
+  const checkedMachineIds = Array.from(checkboxes).map(cb => cb.value);
+  const ctx = document.getElementById('weight-chart');
+  
+  if (!ctx) return;
 
-  // Reverse to chronological
-  const sorted = [...exercises].reverse();
-  const labels = sorted.map(e => formatDate(e.createdAt).slice(5));
-  const maxWeights = sorted.map(e => {
-    if (Array.isArray(e.data)) return Math.max(...e.data.map(s => s.weight || 0));
-    return 0;
+  if (checkedMachineIds.length === 0) {
+    if (chartInstances['weight']) {
+      chartInstances['weight'].destroy();
+      chartInstances['weight'] = null;
+    }
+    // 空の表示
+    const canvasContext = ctx.getContext('2d');
+    canvasContext.clearRect(0, 0, ctx.width, ctx.height);
+    return;
+  }
+
+  // すべての選択されたマシンの記録データをロード
+  const machineDataMap = new Map();
+  const allDatesSet = new Set();
+
+  for (const machineId of checkedMachineIds) {
+    const exercises = await getExercisesByMachine(machineId);
+    const sorted = [...exercises].reverse(); // 古い順（時系列）
+    machineDataMap.set(machineId, sorted);
+    
+    sorted.forEach(e => {
+      const dateLabel = formatDate(e.createdAt).slice(5); // "MM/DD"
+      allDatesSet.add(dateLabel);
+    });
+  }
+
+  // 日付ラベルを時系列順にソート (MM/DD を昇順ソート)
+  // 年またぎなどの処理を簡略化するため、作成日付（タイムスタンプ）で順序を決定します。
+  const allExercises = [];
+  for (const [id, list] of machineDataMap.entries()) {
+    allExercises.push(...list);
+  }
+  allExercises.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+  const uniqueDateLabels = [...new Set(allExercises.map(e => formatDate(e.createdAt).slice(5)))];
+
+  // データセットを作成
+  const datasets = checkedMachineIds.map((machineId, idx) => {
+    const m = getMachineById(machineId);
+    const sortedList = machineDataMap.get(machineId) || [];
+    
+    // 日付ごとの最大重量マップを作成
+    const weightMapByDate = new Map();
+    sortedList.forEach(e => {
+      const dateLabel = formatDate(e.createdAt).slice(5);
+      let maxWeight = 0;
+      if (Array.isArray(e.data)) {
+        maxWeight = Math.max(...e.data.map(s => s.weight || 0));
+      }
+      weightMapByDate.set(dateLabel, maxWeight);
+    });
+
+    // 共通の日付ラベル配列にマッピング（記録が無い日は null）
+    const dataPoints = uniqueDateLabels.map(label => {
+      return weightMapByDate.has(label) ? weightMapByDate.get(label) : null;
+    });
+
+    const color = m ? getCategoryColor(m.category) : '#00d4aa';
+
+    return {
+      label: m ? m.name : '重量 (kg)',
+      data: dataPoints,
+      borderColor: color,
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      tension: 0.4,
+      spanGaps: true, // 記録が飛んでいる箇所を線でつなぐ
+      pointBackgroundColor: color,
+      pointBorderColor: '#0a0e17',
+      pointBorderWidth: 1.5,
+      pointRadius: 3,
+    };
   });
 
   if (chartInstances['weight']) chartInstances['weight'].destroy();
 
-  const ctx = document.getElementById('weight-chart');
   chartInstances['weight'] = new Chart(ctx, {
     type: 'line',
     data: {
-      labels,
-      datasets: [{
-        label: '最大重量 (kg)',
-        data: maxWeights,
-        borderColor: '#00d4aa',
-        backgroundColor: 'rgba(0,212,170,0.1)',
-        fill: true,
-        tension: 0.4,
-        pointBackgroundColor: '#00d4aa',
-        pointBorderColor: '#0a0e17',
-        pointBorderWidth: 2,
-        pointRadius: 4,
-      }]
+      labels: uniqueDateLabels,
+      datasets: datasets
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: '#8892b0',
+            boxWidth: 12,
+            font: { size: 10 }
+          }
+        }
+      },
       scales: {
         x: { ticks: { color: '#5a6585', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
         y: { ticks: { color: '#5a6585', font: { size: 10 } }, grid: { color: 'rgba(255,255,255,0.04)' } },
