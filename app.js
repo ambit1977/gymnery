@@ -2121,7 +2121,7 @@ async function processBodySmartImage(file) {
     const text = result.data.text || '';
     console.log('OCR Parsed Text:\n', text);
 
-    // 3. 正規表現で数値を抽出（日本語・英語ラベル両対応）
+    // 3. 基本的な正規表現パターンによる抽出（日本語・英語ラベル両対応）
     const extractNum = (patterns) => {
       for (const pattern of patterns) {
         const match = text.match(pattern);
@@ -2133,13 +2133,64 @@ async function processBodySmartImage(file) {
       return null;
     };
 
-    // Yolandaの表示ラベルに基づいた正規表現パターン
-    const weight = extractNum([/(?:体重|Weight|Weigh)\s*([\d\.]+)/i, /([\d\.]+)kg/i]);
-    const bmi = extractNum([/(?:BMI)\s*([\d\.]+)/i]);
-    const fat = extractNum([/(?:体脂肪率|Body\s*Fat|Fat)\s*([\d\.]+)/i, /([\d\.]+)%/]);
-    const muscle = extractNum([/(?:筋肉量|Muscle\s*Mass|Muscle)\s*([\d\.]+)/i]);
-    const visceral = extractNum([/(?:内臓脂肪|Visceral\s*Fat|Visceral)\s*(\d+)/i]);
+    // Yolandaの表示ラベルに基づいた正規表現パターン（日本語の誤認識ブレにも対応）
+    let weight = extractNum([/(?:体重|Weight|Weigh)\s*[:：\s]*([\d\.]+)/i, /([\d\.]+)kg/i]);
+    const bmi = extractNum([/(?:BMI)\s*[:：\s]*([\d\.]+)/i]);
+    let fat = extractNum([/(?:体脂肪率|体脂肪|Body\s*Fat|Fat)\s*[:：\s]*([\d\.]+)/i, /([\d\.]+)%/]);
+    let muscle = extractNum([/(?:筋肉量|筋肉|筋内|肌内|筋量|Muscle)\s*[:：\s]*([\d\.]+)/i]);
+    let visceral = extractNum([/(?:内臓脂肪|内臓|内職|内騰|内蔵|内|Visceral)\s*[:：\s]*(\d+)/i]);
     
+    // --- 4. 鉄板フォールバックロジック (ラベルが読めなかった場合の順番に基づく抽出) ---
+    
+    // 4-1. [kg] 単位が付く数値の出現順
+    // Yolanda: 体重 (1つ目のkg) ➡️ 筋肉量 (2つ目のkg) ➡️ 骨量 (3つ目のkg)
+    const kgMatches = [];
+    const kgRegex = /([\d\.]+)\s*(?:kg|Kg|KG|kKg)/g;
+    let match;
+    while ((match = kgRegex.exec(text)) !== null) {
+      const val = parseFloat(match[1]);
+      if (!isNaN(val)) kgMatches.push(val);
+    }
+    
+    if (weight === null && kgMatches.length > 0) {
+      weight = kgMatches[0];
+    }
+    if (muscle === null && kgMatches.length > 1) {
+      muscle = kgMatches[1];
+    }
+
+    // 4-2. [%] 単位が付く数値の出現順
+    // Yolanda: 体脂肪率 (1つ目の%) ➡️ 皮下脂肪 (2つ目の%) ➡️ 体水分率 (3つ目の%)
+    const pctMatches = [];
+    const pctRegex = /([\d\.]+)\s*%/g;
+    while ((match = pctRegex.exec(text)) !== null) {
+      const val = parseFloat(match[1]);
+      if (!isNaN(val)) pctMatches.push(val);
+    }
+    
+    if (fat === null && pctMatches.length > 0) {
+      fat = pctMatches[0];
+    }
+
+    // 4-3. [内臓脂肪] レベルの抽出フォールバック
+    // 内臓脂肪は単一の整数で、「皮下脂肪 (2つ目の数値)」と「体水分率 (3つ目の数値)」の間の行などに出現します。
+    // 単体の小さな数値（1桁から2桁）を探索
+    if (visceral === null) {
+      const singleNumMatches = [];
+      const numLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      for (const line of numLines) {
+        // ラベルなしで数字だけが書かれている行を探す
+        const singleMatch = line.match(/^(\d{1,2})$/);
+        if (singleMatch) {
+          singleNumMatches.push(parseInt(singleMatch[1]));
+        }
+      }
+      // Yolandaの並び順で、最初または途中の単独整数をピックアップ
+      if (singleNumMatches.length > 0) {
+        visceral = singleNumMatches[0];
+      }
+    }
+
     // 日付の抽出 (例: 2026/07/07)
     let date = new Date().toISOString().split('T')[0];
     const dateMatch = text.match(/(\d{4})[-/](\d{2})[-/](\d{2})/);
@@ -2147,13 +2198,18 @@ async function processBodySmartImage(file) {
       date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
     }
 
-    // 4. 各フォームへのマッピング
+    // 5. 各フォームへのマッピング
     if (document.getElementById('body-date')) document.getElementById('body-date').value = date;
     if (weight !== null && document.getElementById('body-weight')) document.getElementById('body-weight').value = weight;
     if (fat !== null && document.getElementById('body-fat')) document.getElementById('body-fat').value = fat;
     if (muscle !== null && document.getElementById('body-muscle')) document.getElementById('body-muscle').value = muscle;
     if (bmi !== null && document.getElementById('body-bmi')) document.getElementById('body-bmi').value = bmi;
     if (visceral !== null && document.getElementById('body-visceral')) document.getElementById('body-visceral').value = visceral;
+
+    // メモ欄に自動でインポート元テキストを挿入
+    if (document.getElementById('body-note')) {
+      document.getElementById('body-note').value = 'Yolandaから入力';
+    }
 
     showToast('画像を解析し、体組成データを入力しました 📸', 'success');
 
