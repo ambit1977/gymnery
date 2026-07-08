@@ -545,6 +545,7 @@ async function showMachineSelect() {
         const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
         
         let daysStr = '今日';
+        const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
           <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
@@ -555,6 +556,7 @@ async function showMachineSelect() {
               </div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
+              ${cameraBtn}
               <span class="badge" style="color: var(--text-secondary); background: var(--bg-elevated); border: 1px solid var(--border-color); font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
               <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
             </div>
@@ -611,6 +613,7 @@ async function showMachineSelect() {
         const daysStr = item.diffDays === 0 ? '今日' : (item.diffDays === 1 ? '昨日' : `中 ${item.diffDays} 日`);
         const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
 
+        const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         html += `
           <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
@@ -621,6 +624,7 @@ async function showMachineSelect() {
               </div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
+              ${cameraBtn}
               <span class="badge" style="color: ${item.badgeColor}; background: ${item.badgeColor}15; border: 1px solid ${item.badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
               <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
             </div>
@@ -673,6 +677,7 @@ async function showMachineSelect() {
           badgeBg = `${badgeColor}15`;
         }
 
+        const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
           <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
@@ -683,6 +688,7 @@ async function showMachineSelect() {
               </div>
             </div>
             <div style="display: flex; align-items: center; gap: 8px;">
+              ${cameraBtn}
               <span class="badge" style="color: ${badgeColor}; background: ${badgeBg}; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
               <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
             </div>
@@ -2497,4 +2503,41 @@ function toggleChecklistItem(checkbox) {
     const total = 16; // 16 items
     badge.textContent = `${checkedItems.length}/${total}`;
   }
+}
+
+// ========================================
+// マシン写真プレビューモーダル
+// ========================================
+function showMachinePhoto(machineId) {
+  const machine = getMachineById(machineId);
+  if (!machine || !machine.image) return;
+
+  closeModal();
+  
+  // モーダルが閉じた後、一瞬時間を置いて新しい写真モーダルを開く
+  setTimeout(() => {
+    showModal(`
+      <div class="modal-handle"></div>
+      <div class="flex items-center justify-between mb-md">
+        <div class="modal-title" style="margin-bottom:0">${machine.name}</div>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal(); showMachineSelect();" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 戻る</button>
+      </div>
+      
+      <div style="width: 100%; border-radius: var(--radius-md); overflow: hidden; background: var(--bg-secondary); border: 1px solid var(--border-color); margin-bottom: var(--space-md); display: flex; align-items: center; justify-content: center; min-height: 200px;">
+        <img src="${machine.image}" alt="${machine.name}" style="width: 100%; height: auto; max-height: 300px; object-fit: contain;" 
+             onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+        <div style="display: none; padding: 32px 16px; text-align: center; color: var(--text-secondary);">
+          <span style="font-size: 2rem; display: block; margin-bottom: 8px;">📷</span>
+          <span style="font-size: 0.85rem;">画像が見つかりません<br>(images フォルダをご確認ください)</span>
+        </div>
+      </div>
+      
+      <div class="card" style="padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border-color); margin-bottom: var(--space-lg);">
+        <div class="text-xs text-muted mb-xs">💡 マシンの特徴・解説</div>
+        <div class="text-sm" style="line-height: 1.5; color: var(--text-primary); white-space: pre-wrap;">${machine.description || '調整箇所等を確認してトレーニングを行ってください。'}</div>
+      </div>
+      
+      <button class="btn btn-secondary btn-block" onclick="closeModal(); showMachineSelect();">マシン選択に戻る</button>
+    `);
+  }, 250);
 }

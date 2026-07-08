@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v7';
+const CACHE_NAME = 'training-app-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -8,6 +8,11 @@ const ASSETS = [
   './machines.js',
   './gsheets.js',
   './manifest.json',
+  './images/chest_press.jpg',
+  './images/lat_pulldown.jpg',
+  './images/leg_press.jpg',
+  './images/treadmill.jpg',
+  './images/bike.jpg',
 ];
 
 self.addEventListener('install', event => {
