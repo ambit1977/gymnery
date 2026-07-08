@@ -2479,11 +2479,13 @@ async function handleImportCSV(event) {
   if (!files || files.length === 0) return;
   try {
     const text = await files[0].text();
-    const firstLine = text.split('\n')[0] || '';
+    const cleanText = text.replace(/^\uFEFF/, '');
+    const firstLine = cleanText.split('\n')[0] || '';
     
-    // スプレッドシート形式かどうか判定（1行目に '日付' が含まれ、かつバックアップ用の 'sessionId' が含まれない場合）
-    if (firstLine.includes('日付') && !firstLine.includes('sessionId')) {
-      const res = await importGoogleSheetsCSV(text);
+    // スプレッドシート形式かどうか判定
+    // 1行目に 'チェストプレス' などの特定マシン名が含まれる、または先頭がカンマである場合など
+    if ((firstLine.includes('チェストプレス') || firstLine.includes('ラットプルダウン') || firstLine.includes('レッグプレス')) && !firstLine.includes('sessionId')) {
+      const res = await importGoogleSheetsCSV(cleanText);
       showToast(`過去データをインポート完了！\n${res.importedSessions}セッション、${res.importedExercises}種目を追加しました ✅`, 'success');
     } else {
       await importDataFromCSV(files);

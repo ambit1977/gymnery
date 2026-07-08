@@ -354,8 +354,18 @@ async function importGoogleSheetsCSV(csvText) {
       const dateStr = cols[0].trim();
       const timeStr = cols[1] ? cols[1].trim() : '10:00';
       
-      const fullDateStr = `${dateStr.replace(/\//g, '-')}T${timeStr.padStart(5, '0')}:00`;
-      const startTime = new Date(fullDateStr).getTime();
+      const dateParts = dateStr.split(/[-\/]/);
+      if (dateParts.length < 3) continue;
+      const year = parseInt(dateParts[0], 10);
+      const month = parseInt(dateParts[1], 10) - 1;
+      const day = parseInt(dateParts[2], 10);
+      
+      const timeParts = timeStr.split(':');
+      const hour = timeParts[0] ? parseInt(timeParts[0], 10) : 10;
+      const minute = timeParts[1] ? parseInt(timeParts[1], 10) : 0;
+      
+      const parsedDate = new Date(year, month, day, hour, minute, 0);
+      const startTime = parsedDate.getTime();
       if (isNaN(startTime)) continue;
 
       let session = await db.sessions
