@@ -1457,6 +1457,7 @@ async function renderSessionsTab(container) {
   const sessions = await getAllSessions();
   let calendarHtml = renderCalendar(new Date(), sessions);
   let listHtml = '';
+  let currentMonthHeader = '';
 
   for (const s of sessions) {
     if (s.id === activeSessionId && !s.endTime) continue;
@@ -1464,6 +1465,15 @@ async function renderSessionsTab(container) {
     const cats = [...new Set(exs.map(e => e.category))];
     const badges = cats.map(c => `<span class="badge badge-${c}">${getCategoryIcon(c)} ${getCategoryLabel(c)}</span>`).join('');
     const d = new Date(s.startTime);
+    
+    const yearMonthStr = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    const monthId = `history-month-${d.getFullYear()}-${d.getMonth()+1}`;
+    
+    if (currentMonthHeader !== yearMonthStr) {
+      currentMonthHeader = yearMonthStr;
+      listHtml += `<div id="${monthId}" class="section-title" style="margin-top: 20px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 2px solid var(--accent-glow); display: flex; align-items: center; gap: 6px;"><span>🗓️</span> <span>${yearMonthStr}</span></div>`;
+    }
+
     listHtml += `
       <div class="history-item" onclick="showSessionDetail(${s.id})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
         <div class="history-date" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50px; border-right: 1px solid var(--border-color); padding-right: 8px; margin-right: 12px;">
@@ -1485,7 +1495,7 @@ async function renderSessionsTab(container) {
       <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">📥 全データエクスポート</button>
       <button class="btn btn-primary btn-sm" onclick="showAddPastSession()" style="flex:1">＋ 手動追加</button>
     </div>
-    <div class="section-title">全セッション</div>
+    <div class="section-title" style="margin-top:20px; margin-bottom:8px;">全セッション</div>
     ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}`;
 }
 
@@ -1587,11 +1597,12 @@ function renderCalendar(date, sessions) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
 
-  const sessionDates = new Set();
+  // 日付 -> セッションID の Map を作成
+  const sessionDates = new Map();
   sessions.forEach(s => {
     const d = new Date(s.startTime);
     if (d.getFullYear() === year && d.getMonth() === month) {
-      sessionDates.add(d.getDate());
+      sessionDates.set(d.getDate(), s.id);
     }
   });
 
@@ -1603,8 +1614,13 @@ function renderCalendar(date, sessions) {
   }
   for (let d = 1; d <= daysInMonth; d++) {
     const isToday = today.getFullYear() === year && today.getMonth() === month && today.getDate() === d;
-    const hasSession = sessionDates.has(d);
-    grid += `<div class="calendar-day${isToday ? ' today' : ''}${hasSession ? ' has-session' : ''}">${d}</div>`;
+    const sessionId = sessionDates.get(d);
+    const hasSession = sessionId !== undefined;
+    
+    const clickAttr = hasSession ? ` onclick="showSessionDetail(${sessionId})"` : '';
+    const cursorStyle = hasSession ? ' style="cursor: pointer;"' : '';
+    
+    grid += `<div class="calendar-day${isToday ? ' today' : ''}${hasSession ? ' has-session' : ''}"${clickAttr}${cursorStyle}>${d}</div>`;
   }
 
   return `
@@ -1622,6 +1638,13 @@ async function changeCalendarMonth(offset) {
   const newDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + offset, 1);
   const sessions = await getAllSessions();
   document.getElementById('calendar-container').innerHTML = renderCalendar(newDate, sessions);
+  
+  // 切り替えた月に該当する履歴一覧の位置までスムーズにスクロール
+  const targetId = `history-month-${newDate.getFullYear()}-${newDate.getMonth() + 1}`;
+  const targetEl = document.getElementById(targetId);
+  if (targetEl) {
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 async function exportAll() {
