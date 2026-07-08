@@ -1207,8 +1207,8 @@ async function showPastSessionMachineSelect(sessionId) {
     `;
 
     catMachines.forEach(m => {
-      const isCompleted = completedMachineIds.has(m.id);
       const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const videoBtn = m.videoUrl ? `<a href="${m.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="動画を見る">🎬</a>` : '';
       
       html += `
         <div class="machine-card" onclick="openExerciseInput('${m.id}', null, ${sessionId})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; ${isCompleted ? 'opacity: 0.6;' : ''}">
@@ -1220,6 +1220,7 @@ async function showPastSessionMachineSelect(sessionId) {
           </div>
           <div style="display: flex; align-items: center; gap: 8px;">
             ${cameraBtn}
+            ${videoBtn}
             ${isCompleted ? `<span class="badge" style="color:var(--text-secondary); background:var(--bg-elevated); font-size:0.7rem; padding:3px 6px;">記録済</span>` : ''}
             <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
           </div>
