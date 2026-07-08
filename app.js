@@ -2483,7 +2483,6 @@ async function handleImportCSV(event) {
     const firstLine = cleanText.split('\n')[0] || '';
     
     // スプレッドシート形式かどうか判定
-    // 1行目に 'チェストプレス' などの特定マシン名が含まれる、または先頭がカンマである場合など
     if ((firstLine.includes('チェストプレス') || firstLine.includes('ラットプルダウン') || firstLine.includes('レッグプレス')) && !firstLine.includes('sessionId')) {
       const res = await importGoogleSheetsCSV(cleanText);
       showToast(`過去データをインポート完了！\n${res.importedSessions}セッション、${res.importedExercises}種目を追加しました ✅`, 'success');
@@ -2493,8 +2492,8 @@ async function handleImportCSV(event) {
     }
     setTimeout(() => location.reload(), 2000);
   } catch (e) {
-    console.error(e);
-    showToast(`インポートに失敗しました: ${e.message}`, 'danger');
+    console.error('Import error full stack:', e);
+    showToast(`インポートに失敗しました: ${e.message}\n${e.stack ? e.stack.split('\n')[0] : ''}`, 'danger');
   }
 }
 

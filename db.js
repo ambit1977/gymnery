@@ -337,18 +337,31 @@ async function importGoogleSheetsCSV(csvText) {
     return letter.charCodeAt(0) - 65;
   };
 
+  const parseCSVLine = (line) => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    result.push(current.trim());
+    return result.map(val => val.replace(/^"|"$/g, '').replace(/""/g, '"'));
+  };
+
   let importedSessions = 0;
   let importedExercises = 0;
 
   await db.transaction('rw', db.sessions, db.exercises, async () => {
     for (let i = 1; i < lines.length; i++) {
-      const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^,]*))/g;
-      let match;
-      const cols = [];
-      while ((match = regex.exec(lines[i])) !== null) {
-        cols.push(match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]);
-      }
-
+      const cols = parseCSVLine(lines[i]);
       if (cols.length < 2 || !cols[0]) continue;
 
       const dateStr = cols[0].trim();
