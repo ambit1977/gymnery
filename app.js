@@ -267,12 +267,13 @@ async function renderHome(main) {
         }
       }
       const cameraBtn = (machine && machine.image) ? `<span onclick="event.stopPropagation(); showMachinePhoto('${ex.machineId}')" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const videoBtn = (machine && machine.videoUrl) ? `<a href="${machine.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="動画を見る">🎬</a>` : '';
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exListHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}; cursor:pointer" onclick="openExerciseInput('${ex.machineId}', ${ex.id})">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${modeBadge}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${videoBtn}${modeBadge}</span>
             <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); confirmDeleteExercise(${ex.id},${activeSessionId})" style="color:var(--danger);padding:4px">✕</button>
           </div>
           <div class="exercise-sets">${setsHtml}</div>
@@ -1100,13 +1101,14 @@ async function showSessionDetail(sessionId) {
           <span class="exercise-set-val">${s.weight || 0}kg</span>
           <span class="exercise-set-val">${s.reps || 0}回${exerciseLabel}</span>`;
       });
-      const cameraBtn = (machine && machine.image) ? `<span onclick="event.stopPropagation(); showMachinePhoto('${ex.machineId}')" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const cameraBtn = (machine && machine.image) ? `<span onclick="event.stopPropagation(); showMachinePhoto('${ex.machineId}', 'detail:${sessionId}')" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const videoBtn = (machine && machine.videoUrl) ? `<a href="${machine.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="動画を見る">🎬</a>` : '';
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${modeBadge}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${videoBtn}${modeBadge}</span>
             <div style="display:flex; gap:4px;">
               <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
               <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
@@ -1134,13 +1136,14 @@ async function showSessionDetail(sessionId) {
           </div>`;
         }
       }
-      const cameraBtn = (machine && machine.image) ? `<span onclick="event.stopPropagation(); showMachinePhoto('${ex.machineId}')" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const cameraBtn = (machine && machine.image) ? `<span onclick="event.stopPropagation(); showMachinePhoto('${ex.machineId}', 'detail:${sessionId}')" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      const videoBtn = (machine && machine.videoUrl) ? `<a href="${machine.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 2px; margin-left: 6px; background:var(--bg-secondary); border-radius:50%; width:22px; height:22px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="動画を見る">🎬</a>` : '';
       const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.6rem; padding:2px 4px; margin-left:4px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
       const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="padding-left:4px;">💡 ${ex.note}</div>` : '';
       exHtml += `
         <div class="exercise-item" style="border-left:3px solid ${catColor}">
           <div class="exercise-header">
-            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${modeBadge}</span>
+            <span class="exercise-name">${getCategoryIcon(ex.category)} ${ex.machineName}${cameraBtn}${videoBtn}${modeBadge}</span>
             <div style="display:flex; gap:4px;">
               <button class="btn btn-ghost btn-sm" onclick="openExerciseInput('${ex.machineId}', ${ex.id})" style="color:var(--info);padding:4px">✏️</button>
               <button class="btn btn-ghost btn-sm" onclick="confirmDeleteExercise(${ex.id},${sessionId})" style="color:var(--danger);padding:4px">✕</button>
@@ -2717,10 +2720,16 @@ function showMachinePhoto(machineId, returnTarget = 'close') {
         </div>
       </div>
       
-      <div class="card" style="padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border-color); margin-bottom: var(--space-lg);">
+      <div class="card" style="padding: 12px 16px; background: var(--bg-card); border: 1px solid var(--border-color); margin-bottom: var(--space-md);">
         <div class="text-xs text-muted mb-xs">💡 マシンの特徴・解説</div>
         <div class="text-sm" style="line-height: 1.5; color: var(--text-primary); white-space: pre-wrap;">${machine.description || '調整箇所等を確認してトレーニングを行ってください。'}</div>
       </div>
+      
+      ${machine.videoUrl ? `
+        <a href="${machine.videoUrl}" target="_blank" class="btn btn-primary btn-block mb-sm" style="display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; font-weight: bold; background: #ff0000; border-color: #ff0000;">
+          <span>🎬</span> 使い方動画を再生 (YouTube)
+        </a>
+      ` : ''}
       
       <button class="btn btn-secondary btn-block" onclick="closeModal(); ${returnJs}">閉じる</button>
     `);
