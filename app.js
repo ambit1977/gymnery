@@ -995,6 +995,11 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
   if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
   closeModal();
 
+  // スプレッドシート自動同期のトリガー
+  if (typeof gsheetsMaybeAutoSync === 'function') {
+    gsheetsMaybeAutoSync();
+  }
+
   if (editExerciseId || targetSessionId) {
     // 過去セッションの編集・追加時は詳細画面に戻る
     showSessionDetail(resolvedSessionId);
@@ -1207,6 +1212,7 @@ async function showPastSessionMachineSelect(sessionId) {
     `;
 
     catMachines.forEach(m => {
+      const isCompleted = completedMachineIds.has(m.id);
       const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
       const videoBtn = m.videoUrl ? `<a href="${m.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center; text-decoration:none;" title="動画を見る">🎬</a>` : '';
       
@@ -1260,6 +1266,12 @@ async function doDeleteExercise(exerciseId, sessionId) {
   await deleteExercise(exerciseId);
   closeModal();
   showToast('記録を削除しました', 'success');
+
+  // スプレッドシート自動同期のトリガー
+  if (typeof gsheetsMaybeAutoSync === 'function') {
+    gsheetsMaybeAutoSync();
+  }
+
   showSessionDetail(sessionId);
 }
 
