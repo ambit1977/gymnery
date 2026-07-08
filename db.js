@@ -360,12 +360,23 @@ async function importGoogleSheetsCSV(csvText) {
   let importedExercises = 0;
 
   await db.transaction('rw', db.sessions, db.exercises, async () => {
+    // 過去にスプレッドシートからインポートしたデータを一度削除（クリーンアップ）
+    const oldSessions = await db.sessions.filter(s => s.note === 'スプレッドシートからインポート').toArray();
+    const oldSessionIds = oldSessions.map(s => s.id);
+    if (oldSessionIds.length > 0) {
+      await db.exercises.where('sessionId').anyOf(oldSessionIds).delete();
+      await db.sessions.where('id').anyOf(oldSessionIds).delete();
+    }
+
     for (let i = 1; i < lines.length; i++) {
       const cols = parseCSVLine(lines[i]);
       if (cols.length < 2 || !cols[0]) continue;
+      
+      // B列（開始時間）が空欄の場合は、トレーニングをしていない日なのでスキップ
+      if (!cols[1] || cols[1].trim() === '') continue;
 
       const dateStr = cols[0].trim();
-      const timeStr = cols[1] ? cols[1].trim() : '10:00';
+      const timeStr = cols[1].trim();
       
       const dateParts = dateStr.split(/[-\/]/);
       if (dateParts.length < 3) continue;
