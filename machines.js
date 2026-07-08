@@ -8,6 +8,12 @@ const FACILITY = {
   address: '練馬区旭町1-16-1',
   phone: '03-3904-5191',
   fee: '1時間 100円',
+  businessHours: '9:00 〜 21:30',
+  breakTimes: [
+    '12:30 〜 13:00',
+    '16:30 〜 17:00'
+  ],
+  closedDays: '毎月第2火曜日（祝日の場合は翌日）、年末年始（12月29日〜1月3日）',
 };
 
 // マシンカテゴリ定義
@@ -50,6 +56,8 @@ const MACHINES = [
     ],
     weights: [3.5, 5.0, 6.5, 8.0, 9.5, 11.0, 12.5, 14.0, 15.5, 17.0, 18.5, 20.0, 21.5, 23.0, 24.5, 26.0, 27.5, 30.5, 33.5, 36.5, 39.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/fly.jpg',
+    description: '大胸筋の内側・上部を意識して鍛えるバタフライ運動マシンです。胸を開き、半円を描くようにアームを前に閉じます。',
   },
   {
     id: 'lat_pulldown',
@@ -78,6 +86,8 @@ const MACHINES = [
     ],
     weights: [3.0, 5.0, 7.0, 9.0, 11.0, 13.0, 15.0, 17.0, 19.0, 23.0, 27.0, 31.0, 35.0, 39.0, 43.0, 47.0, 51.0, 55.0, 59.0, 63.0, 67.0],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/shoulder_press.jpg',
+    description: '肩（三角筋）を重点的に鍛えるプレス系のトレーニングマシンです。シート高さを調整し、グリップを真上に押し上げます。',
   },
 
   // === 下半身 ===
@@ -93,6 +103,8 @@ const MACHINES = [
     ],
     weights: [0.5, 1.3, 2.0, 2.8, 3.5, 4.3, 5.0, 5.8, 6.5, 8.0, 9.5, 11.0, 12.5, 14.0, 15.5, 17.0, 18.5, 20.0, 21.5, 23.0, 24.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/leg_curl.jpg',
+    description: '太ももの裏側（ハムストリングス）を効果的に鍛えるマシンです。シートに深く座り、パッドに当てた足を後ろに曲げます。',
   },
   {
     id: 'leg_extension',
@@ -106,6 +118,8 @@ const MACHINES = [
     ],
     weights: [5.0, 6.3, 7.5, 8.8, 10.0, 11.3, 12.5, 13.8, 15.0, 17.5, 20.0, 22.5, 25.0, 27.5, 30.0, 32.5, 35.0, 37.5, 40.0, 42.5, 45.0],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/leg_extension.jpg',
+    description: '太ももの前側（大腿四頭筋）を集中的に鍛えるマシンです。膝の可動域に合わせて、背もたれと足首のパッドを調節します。',
   },
   {
     id: 'leg_press',
@@ -134,6 +148,8 @@ const MACHINES = [
     ],
     weights: [8.0, 18.0, 28.0, 38.0, 48.0, 58.0, 68.0, 78.0, 88.0, 98.0, 108.0, 118.0, 128.0, 138.0, 148.0, 158.0, 168.0, 178.0, 188.0, 198.0, 208.0],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/calf_raise.jpg',
+    description: 'ふくらはぎ（腓腹筋・ヒラメ筋）を鍛えるつま先立ち運動用のマシンです。パッドを肩に当ててつま先を上下させます。',
   },
   {
     id: 'adduction',
@@ -147,6 +163,8 @@ const MACHINES = [
     ],
     weights: [2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5, 41.5, 44.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/adduction.jpg',
+    description: '太ももの内側（内転筋群）を鍛えるマシンです。アームを外側から内側に向けて閉じます。',
   },
   {
     id: 'abduction',
@@ -160,6 +178,8 @@ const MACHINES = [
     ],
     weights: [2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5, 41.5, 44.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/abduction.jpg',
+    description: 'お尻の外側（臀筋群）を鍛えるマシンです。足を揃えた状態から外側に向けて開きます。',
   },
   {
     id: 'glute',
@@ -173,6 +193,8 @@ const MACHINES = [
     ],
     weights: [2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5, 41.5, 44.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/glute.jpg',
+    description: '大臀筋（お尻）を集中的に鍛えるヒップキックバック用マシンです。片足を後ろに力強く押し出します。',
   },
 
   // === 体幹 ===
@@ -188,6 +210,8 @@ const MACHINES = [
     ],
     weights: [2.5, 4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 16.0, 17.5, 19.0, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5, 41.5, 44.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/knee_raise.jpg',
+    description: '下腹部（腹直筋下部・腸腰筋）を鍛える懸垂・脚上げ用ラックです。肘をパッドに乗せて体を固定し、膝をお腹に引き上げます。',
   },
   {
     id: 'rotary_torso',
@@ -201,6 +225,8 @@ const MACHINES = [
     ],
     weights: [1.5, 2.8, 4.1, 5.4, 6.7, 8.0, 9.3, 10.6, 11.9, 14.5, 17.1, 19.7, 22.3, 24.9, 27.5, 30.1, 32.7, 35.3, 37.9, 40.5, 43.1],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/rotary_torso.jpg',
+    description: 'お腹の横（腹斜筋）を鍛えてウエストを引き締める回転運動マシンです。上半身を固定して骨盤を左右に回旋させます。',
   },
   {
     id: 'abdominal',
@@ -214,6 +240,8 @@ const MACHINES = [
     ],
     weights: [2.0, 3.5, 5.0, 6.5, 8.0, 9.5, 11.0, 12.5, 14.0, 17.0, 20.0, 23.0, 26.0, 29.0, 32.0, 35.0, 38.0, 41.0, 44.0, 47.0, 50.0],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/abdominal.jpg',
+    description: 'お腹の正面（腹直筋）を集中的に鍛える前屈運動用マシンです。背中を丸めながらバーを前方に引き下げます。',
   },
   {
     id: 'back_extension',
@@ -228,6 +256,8 @@ const MACHINES = [
     ],
     weights: [2.0, 4.0, 6.0, 8.0, 10.0, 12.0, 14.0, 16.0, 18.0, 22.0, 26.0, 30.0, 34.0, 38.0, 42.0, 46.0, 50.0, 54.0, 58.0, 62.0, 66.0],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/back_extension.jpg',
+    description: '背中下部（脊柱起立筋）を鍛える背筋運動用マシンです。パッドに背中を当て、ゆっくり上体を後ろに倒します。',
   },
 
   // === 腕 ===
@@ -243,6 +273,8 @@ const MACHINES = [
     ],
     weights: [4.0, 5.5, 7.0, 8.5, 10.0, 11.5, 13.0, 14.5, 17.5, 20.5, 23.5, 26.5, 29.5, 32.5, 35.5, 38.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/arm_curl.jpg',
+    description: '力こぶ（上腕二頭筋）を鍛えるアームカール用マシンです。肘受け台に腕を固定してアームを引き上げます。',
   },
   {
     id: 'arm_extension',
@@ -256,6 +288,8 @@ const MACHINES = [
     ],
     weights: [1.5, 2.5, 3.5, 4.5, 5.5, 6.5, 7.5, 8.5, 10.5, 12.5, 14.5, 16.5, 18.5, 20.5, 22.5, 24.5],
     hasSets: true,
+    image: 'https://ambit1977.github.io/gymnery/images/arm_extension.jpg',
+    description: '二の腕（上腕三頭筋）を引き締める押し下げ運動用マシンです。肘を固定してアームを下に押し下げます。',
   },
 
   // === 有酸素 ===
@@ -284,6 +318,8 @@ const MACHINES = [
       { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 },
     ],
     hasSets: false,
+    image: 'https://ambit1977.github.io/gymnery/images/crosstrainer.jpg',
+    description: '関節への負担を抑えながら、全身の有酸素運動ができるクロストレーナーです。ハンドルを持って足を楕円状にスライドさせます。',
   },
   {
     id: 'bike',

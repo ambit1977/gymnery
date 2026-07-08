@@ -2285,11 +2285,17 @@ function renderSettings(main) {
   main.innerHTML = `
     <div class="page">
       <div class="card mb-md">
-        <div class="text-sm font-bold mb-sm">📍 施設情報</div>
-        <div class="text-sm">${FACILITY.name}</div>
-        <div class="text-xs text-muted">${FACILITY.address}</div>
-        <div class="text-xs text-muted">☎ ${FACILITY.phone}</div>
-        <div class="text-xs text-muted">💰 ${FACILITY.fee}</div>
+        <div class="text-sm font-bold mb-xs">📍 施設情報</div>
+        <div class="text-sm font-bold">${FACILITY.name}</div>
+        <div class="text-xs text-muted mb-sm">${FACILITY.address}</div>
+        <div class="text-xs text-muted" style="margin-bottom: 2px;">☎ 電話: ${FACILITY.phone}</div>
+        <div class="text-xs text-muted" style="margin-bottom: 2px;">💰 利用料: ${FACILITY.fee}</div>
+        <div class="text-xs text-muted" style="margin-bottom: 2px;">🕒 営業時間: ${FACILITY.businessHours}</div>
+        <div class="text-xs text-muted" style="margin-bottom: 2px;">
+          ☕ 休憩・入替時間:
+          <span style="font-weight: 500;">12:30〜13:00 / 16:30〜17:00</span>
+        </div>
+        <div class="text-xs text-muted" style="margin-bottom: 2px;">📅 休館日: ${FACILITY.closedDays}</div>
       </div>
 
       <div class="card mb-md">
