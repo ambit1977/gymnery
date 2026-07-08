@@ -743,13 +743,15 @@ function toggleMachineSortOrder() {
 // ========================================
 // エクササイズ入力
 // ========================================
-async function openExerciseInput(machineId, editExerciseId = null) {
+async function openExerciseInput(machineId, editExerciseId = null, targetSessionId = null) {
   const machine = getMachineById(machineId);
   closeModal();
   await new Promise(r => setTimeout(r, 300));
 
   let lastData = null;
   let lastNote = '';
+  let resolvedSessionId = targetSessionId;
+
   if (editExerciseId) {
     const db = new Dexie('TrainingRoomApp');
     db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
@@ -757,6 +759,7 @@ async function openExerciseInput(machineId, editExerciseId = null) {
     if (ex) {
       lastData = ex.data;
       lastNote = ex.note || '';
+      resolvedSessionId = ex.sessionId; // 編集時はレコードの sessionId を使用
     }
   } else {
     const setting = await getMachineSetting(machineId);
@@ -773,7 +776,8 @@ async function openExerciseInput(machineId, editExerciseId = null) {
   }
 
   let timerHeaderHtml = '';
-  if (activeSessionId) {
+  // 進行中のアクティブセッションかつ、今回の編集/追加セッションと一致する場合のみタイマーを表示
+  if (activeSessionId && activeSessionId === resolvedSessionId) {
     timerHeaderHtml = `
       <div id="modal-timer-header" class="text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px; font-size:1.3rem; font-weight:800; border: 2px solid var(--accent-glow);">
         終了まで: <span id="modal-timer-display" style="font-variant-numeric: tabular-nums;">--:--</span>
@@ -834,10 +838,18 @@ async function openExerciseInput(machineId, editExerciseId = null) {
   if (editExerciseId) {
     html += `
       <div class="flex gap-sm mt-lg">
-        <button class="btn btn-secondary" onclick="closeModal();showSessionDetail(${activeSessionId})" style="flex:1">戻る</button>
+        <button class="btn btn-secondary" onclick="closeModal();showSessionDetail(${resolvedSessionId})" style="flex:1">戻る</button>
         <button class="btn btn-primary" onclick="saveExercise('${machineId}', ${editExerciseId}, 'update')" style="flex:1">更新</button>
       </div>`;
+  } else if (targetSessionId) {
+    // 過去セッションへの新規追加モード
+    html += `
+      <div class="flex gap-sm mt-lg">
+        <button class="btn btn-secondary" onclick="showPastSessionMachineSelect(${targetSessionId})" style="flex:1">戻る</button>
+        <button class="btn btn-primary" onclick="saveExercise('${machineId}', null, 'ok', ${targetSessionId})" style="flex:1">保存</button>
+      </div>`;
   } else {
+    // 通常の進行中セッション追加モード
     html += `
       <div class="flex gap-sm mt-lg flex-wrap">
         <button class="btn btn-secondary" onclick="closeModal();showMachineSelect()" style="flex:1; min-width: 80px;">戻る</button>
@@ -917,7 +929,7 @@ function removeSetRow(btn) {
   });
 }
 
-async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
+async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targetSessionId = null) {
   const machine = getMachineById(machineId);
   let data;
 
@@ -942,38 +954,49 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok') {
 
   const machineNote = document.getElementById('machine-note') ? document.getElementById('machine-note').value : '';
 
+  let resolvedSessionId = targetSessionId || activeSessionId;
+
   if (editExerciseId) {
+    const db = new Dexie('TrainingRoomApp');
+    db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
+    const ex = await db.exercises.get(editExerciseId);
+    if (ex) {
+      resolvedSessionId = ex.sessionId; // 編集対象セッションIDを取得
+    }
     await updateExercise(editExerciseId, data, machineNote);
     showToast(`${machine.name} を更新しました ✅`, 'success');
   } else {
-    await addExercise(activeSessionId, machineId, data, mode, machineNote);
+    await addExercise(resolvedSessionId, machineId, data, mode, machineNote);
     showToast(`${machine.name} を記録しました ✅`, 'success');
     
-    // Save defaults logic
-    let defaultData = JSON.parse(JSON.stringify(data));
-    if (machine.type === 'strength' && machine.hasSets) {
-      if (mode === 'ok' && machine.weights && defaultData.length > 0) {
-        // Find highest weight and increment it
-        let maxWeight = 0;
-        defaultData.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
-        const idx = machine.weights.findIndex(w => w >= maxWeight);
-        if (idx !== -1 && idx < machine.weights.length - 1) {
-          const nextWeight = machine.weights[idx + 1];
-          defaultData.forEach(s => {
-            if (s.weight === maxWeight) s.weight = nextWeight;
-          });
+    // 進行中のアクティブセッションのみ初期値更新ロジックを実行
+    if (resolvedSessionId === activeSessionId) {
+      let defaultData = JSON.parse(JSON.stringify(data));
+      if (machine.type === 'strength' && machine.hasSets) {
+        if (mode === 'ok' && machine.weights && defaultData.length > 0) {
+          let maxWeight = 0;
+          defaultData.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
+          const idx = machine.weights.findIndex(w => w >= maxWeight);
+          if (idx !== -1 && idx < machine.weights.length - 1) {
+            const nextWeight = machine.weights[idx + 1];
+            defaultData.forEach(s => {
+              if (s.weight === maxWeight) s.weight = nextWeight;
+            });
+          }
         }
+        await saveMachineSetting(machineId, { data: [defaultData[0]], note: machineNote });
+      } else {
+        await saveMachineSetting(machineId, { data: defaultData, note: machineNote });
       }
-      await saveMachineSetting(machineId, { data: [defaultData[0]], note: machineNote });
-    } else {
-      await saveMachineSetting(machineId, { data: defaultData, note: machineNote });
     }
   }
 
   if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
   closeModal();
-  if (editExerciseId) {
-    showSessionDetail(activeSessionId);
+
+  if (editExerciseId || targetSessionId) {
+    // 過去セッションの編集・追加時は詳細画面に戻る
+    showSessionDetail(resolvedSessionId);
   } else {
     navigateTo('home');
   }
@@ -1146,11 +1169,70 @@ async function showSessionDetail(sessionId) {
       </div>
       <div class="section-title">${exercises.length}種目</div>
       ${exHtml || '<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-text">記録がありません</div></div>'}
-      <div class="flex gap-sm mt-lg">
+      <button class="btn btn-primary btn-block mb-md" onclick="showPastSessionMachineSelect(${sessionId})" style="margin-top: 16px;">＋ 種目を追加</button>
+      <div class="flex gap-sm">
         <button class="btn btn-secondary btn-sm" onclick="exportSession(${sessionId})" style="flex:1">📥 CSV出力</button>
         <button class="btn btn-danger btn-sm" onclick="confirmDeleteSession(${sessionId})" style="flex:1">🗑 削除</button>
       </div>
     </div>`;
+}
+
+async function showPastSessionMachineSelect(sessionId) {
+  const catOrder = ['cardio', 'upper', 'lower', 'core', 'arm'];
+  const sessionExs = await getExercisesBySession(sessionId);
+  const completedMachineIds = new Set(sessionExs.map(e => e.machineId));
+
+  let html = `
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-md">
+      <div class="modal-title" style="margin-bottom:0">過去セッションへの種目追加</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
+    </div>
+    <div style="max-height: 55vh; overflow-y: auto; padding-right: 4px;">
+  `;
+
+  catOrder.forEach(catKey => {
+    const cat = CATEGORIES[catKey];
+    const catMachines = getMachinesByCategory(catKey);
+    if (catMachines.length === 0) return;
+
+    html += `
+      <div style="margin-top: 12px; margin-bottom: 8px; font-weight: bold; font-size: 0.85rem; color: var(--text-secondary); display: flex; align-items: center; gap: 4px;">
+        <span>${cat.icon}</span>
+        <span>${cat.label}</span>
+      </div>
+    `;
+
+    catMachines.forEach(m => {
+      const isCompleted = completedMachineIds.has(m.id);
+      const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+      
+      html += `
+        <div class="machine-card" onclick="openExerciseInput('${m.id}', null, ${sessionId})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; ${isCompleted ? 'opacity: 0.6;' : ''}">
+          <div style="display: flex; align-items: center; gap: var(--space-sm);">
+            <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
+            <div class="machine-info">
+              <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+            </div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            ${cameraBtn}
+            ${isCompleted ? `<span class="badge" style="color:var(--text-secondary); background:var(--bg-elevated); font-size:0.7rem; padding:3px 6px;">記録済</span>` : ''}
+            <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
+          </div>
+        </div>
+      `;
+    });
+  });
+
+  html += `
+    </div>
+    <div class="flex gap-sm mt-lg">
+      <button class="btn btn-secondary btn-block" onclick="closeModal();showSessionDetail(${sessionId})">戻る</button>
+    </div>
+  `;
+
+  showModal(html);
 }
 
 async function exportSession(sessionId) {
