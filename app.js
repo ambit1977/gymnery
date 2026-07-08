@@ -2284,18 +2284,36 @@ async function doDeleteBody(id) {
 function renderSettings(main) {
   main.innerHTML = `
     <div class="page">
-      <div class="card mb-md">
+      <div class="card mb-md" style="line-height: 1.6;">
         <div class="text-sm font-bold mb-xs">📍 施設情報</div>
         <div class="text-sm font-bold">${FACILITY.name}</div>
-        <div class="text-xs text-muted mb-sm">${FACILITY.address}</div>
-        <div class="text-xs text-muted" style="margin-bottom: 2px;">☎ 電話: ${FACILITY.phone}</div>
-        <div class="text-xs text-muted" style="margin-bottom: 2px;">💰 利用料: ${FACILITY.fee}</div>
-        <div class="text-xs text-muted" style="margin-bottom: 2px;">🕒 営業時間: ${FACILITY.businessHours}</div>
-        <div class="text-xs text-muted" style="margin-bottom: 2px;">
-          ☕ 休憩・入替時間:
-          <span style="font-weight: 500;">12:30〜13:00 / 16:30〜17:00</span>
+        <div class="text-xs text-muted mb-sm">${FACILITY.address} (☎ ${FACILITY.phone})</div>
+        
+        <div class="mb-sm" style="border-bottom: 1px solid var(--border-color); padding-bottom: 6px;">
+          <div class="text-xs font-bold text-primary">🏛️ 区民館 全般</div>
+          <div class="text-xs text-muted">🕒 開館時間: ${FACILITY.openHours}</div>
+          <div class="text-xs text-muted">✉️ 受付時間: ${FACILITY.receptionHours}</div>
+          <div class="text-xs text-muted">📅 休館日: ${FACILITY.closedDays}</div>
         </div>
-        <div class="text-xs text-muted" style="margin-bottom: 2px;">📅 休館日: ${FACILITY.closedDays}</div>
+
+        <div>
+          <div class="text-xs font-bold text-primary">🏃 地下トレーニング室 (個人利用)</div>
+          <div class="text-xs text-muted">👥 対象: ${FACILITY.gymTarget}</div>
+          <div class="text-xs text-muted">🕒 利用時間 (入替制):</div>
+          <ul style="margin: 2px 0 6px 14px; padding: 0; list-style-type: circle; font-size: var(--font-size-xs); color: var(--text-muted);">
+            ${FACILITY.gymHours.map(h => `<li>${h}</li>`).join('')}
+          </ul>
+          <div class="text-xs text-muted">💰 使用料:</div>
+          <ul style="margin: 2px 0 6px 14px; padding: 0; list-style-type: circle; font-size: var(--font-size-xs); color: var(--text-muted);">
+            ${FACILITY.gymFee.map(f => `<li>${f}</li>`).join('')}
+          </ul>
+          <div class="text-xs text-muted">🎒 持ち物: ${FACILITY.gymBelongings}</div>
+          <div class="text-xs text-muted">📝 手続き: ${FACILITY.gymProcedure}</div>
+          <div class="text-xs text-muted">⚠️ 注意事項:</div>
+          <ul style="margin: 2px 0 0 14px; padding: 0; list-style-type: square; font-size: var(--font-size-xs); color: var(--text-muted);">
+            ${FACILITY.gymNotes.map(n => `<li>${n}</li>`).join('')}
+          </ul>
+        </div>
       </div>
 
       <div class="card mb-md">
