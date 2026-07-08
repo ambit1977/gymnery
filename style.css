@@ -1495,3 +1495,125 @@ textarea.input {
     opacity: 0;
   }
 }
+
+/* --- Sticky Calendar & Accordion / Picker Style --- */
+.sticky-calendar-wrapper {
+  position: sticky;
+  top: 0; /* わずかな引っかかりを作って影を出す */
+  z-index: 100;
+  background: var(--bg-primary);
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+  transition: box-shadow 0.2s ease;
+  margin-top: -8px; /* 親のpadding相殺用 */
+}
+.sticky-calendar-wrapper.is-stuck {
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+  border-bottom-color: var(--accent);
+}
+
+.calendar-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 6px 0;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  margin-top: 4px;
+  gap: 4px;
+}
+.calendar-toggle-btn:active {
+  background: var(--bg-card);
+}
+
+.calendar-foldable-content {
+  max-height: 400px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease;
+}
+.calendar-foldable-content.collapsed {
+  max-height: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.calendar-header-picker-trigger {
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease, color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.calendar-header-picker-trigger:hover {
+  background: var(--bg-elevated);
+  color: var(--accent);
+}
+
+/* ピッカーメニュー用のモーダル内カスタムスタイル */
+.picker-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+.picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 4px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: 0.15s ease;
+  position: relative;
+  min-height: 52px;
+}
+.picker-item:hover, .picker-item.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.picker-item .dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--accent);
+  border-radius: 50%;
+  position: absolute;
+  bottom: 6px;
+  box-shadow: 0 0 6px var(--accent);
+}
+.year-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+.year-picker-item {
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  text-align: center;
+  font-weight: bold;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+.year-picker-item:hover, .year-picker-item.active {
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}

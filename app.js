@@ -1453,9 +1453,13 @@ async function switchHistoryTab(tab) {
   }
 }
 
+let calendarCollapsed = localStorage.getItem('calendar_collapsed') === '1';
+let isScrollingToAnchor = false;
+
 async function renderSessionsTab(container) {
   const sessions = await getAllSessions();
-  let calendarHtml = renderCalendar(new Date(), sessions);
+  const initialDate = calendarDate || new Date();
+  let calendarHtml = renderCalendar(initialDate, sessions);
   let listHtml = '';
   let currentMonthHeader = '';
 
@@ -1471,7 +1475,9 @@ async function renderSessionsTab(container) {
     
     if (currentMonthHeader !== yearMonthStr) {
       currentMonthHeader = yearMonthStr;
-      listHtml += `<div id="${monthId}" class="section-title" style="margin-top: 20px; margin-bottom: 10px; padding-bottom: 4px; border-bottom: 2px solid var(--accent-glow); display: flex; align-items: center; gap: 6px;"><span>🗓️</span> <span>${yearMonthStr}</span></div>`;
+      listHtml += `<div id="${monthId}" data-year="${d.getFullYear()}" data-month="${d.getMonth()+1}" class="history-month-section-header section-title" style="margin-top: 20px; margin-bottom: 10px; padding-top: 8px; padding-bottom: 4px; border-bottom: 2px solid var(--accent-glow); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display:flex; align-items:center; gap:6px;"><span>🗓️</span> <span>${yearMonthStr}</span></div>
+      </div>`;
     }
 
     listHtml += `
@@ -1490,13 +1496,29 @@ async function renderSessionsTab(container) {
   }
 
   container.innerHTML = `
-    <div id="calendar-container">${calendarHtml}</div>
-    <div class="flex gap-sm mb-lg">
+    <!-- 固定表示されるカレンダーラッパー -->
+    <div id="sticky-calendar-container-wrapper" class="sticky-calendar-wrapper">
+      <div id="calendar-fold-content" class="calendar-foldable-content ${calendarCollapsed ? 'collapsed' : ''}">
+        <div id="calendar-container">${calendarHtml}</div>
+      </div>
+      <button class="calendar-toggle-btn" onclick="toggleCalendarFold()">
+        <span id="calendar-toggle-icon">${calendarCollapsed ? '▼ カレンダーを開く' : '▲ カレンダーを閉じる'}</span>
+      </button>
+    </div>
+    
+    <div class="flex gap-sm mb-lg" style="margin-top: 16px;">
       <button class="btn btn-secondary btn-sm" onclick="exportAll()" style="flex:1">📥 全データエクスポート</button>
       <button class="btn btn-primary btn-sm" onclick="showAddPastSession()" style="flex:1">＋ 手動追加</button>
     </div>
-    <div class="section-title" style="margin-top:20px; margin-bottom:8px;">全セッション</div>
-    ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}`;
+    <div class="section-title" style="margin-top:10px; margin-bottom:8px;">全セッション</div>
+    <div id="history-sessions-list-container">
+      ${listHtml || '<div class="empty-state"><div class="empty-icon">📅</div><div class="empty-text">まだ履歴がありません</div></div>'}
+    </div>`;
+
+  setTimeout(() => {
+    setupStickyCalendarShadow();
+    setupHistoryIntersectionObserver();
+  }, 100);
 }
 
 async function renderMachinesTab(container) {
@@ -1597,7 +1619,6 @@ function renderCalendar(date, sessions) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = new Date();
 
-  // 日付 -> セッションID の Map を作成
   const sessionDates = new Map();
   sessions.forEach(s => {
     const d = new Date(s.startTime);
@@ -1627,7 +1648,10 @@ function renderCalendar(date, sessions) {
     <div class="calendar">
       <div class="calendar-header">
         <button class="btn btn-ghost btn-sm" onclick="changeCalendarMonth(-1)">‹</button>
-        <span class="calendar-month">${year}年${month + 1}月</span>
+        <span class="calendar-month">
+          <span class="calendar-header-picker-trigger" onclick="showYearPicker()">${year}年</span>
+          <span class="calendar-header-picker-trigger" onclick="showMonthPicker(${year})">${month + 1}月</span>
+        </span>
         <button class="btn btn-ghost btn-sm" onclick="changeCalendarMonth(1)">›</button>
       </div>
       <div class="calendar-grid">${grid}</div>
@@ -1637,13 +1661,27 @@ function renderCalendar(date, sessions) {
 async function changeCalendarMonth(offset) {
   const newDate = new Date(calendarDate.getFullYear(), calendarDate.getMonth() + offset, 1);
   const sessions = await getAllSessions();
-  document.getElementById('calendar-container').innerHTML = renderCalendar(newDate, sessions);
   
-  // 切り替えた月に該当する履歴一覧の位置までスムーズにスクロール
+  calendarDate = newDate;
+  const container = document.getElementById('calendar-container');
+  if (container) {
+    container.innerHTML = renderCalendar(newDate, sessions);
+  }
+  
+  // 逆連動ループを防ぐため、一時的にスクロール検知フラグをオンにする
+  isScrollingToAnchor = true;
+  
   const targetId = `history-month-${newDate.getFullYear()}-${newDate.getMonth() + 1}`;
   const targetEl = document.getElementById(targetId);
   if (targetEl) {
     targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    
+    // スクロールアニメーションの完了（約400ms）を見計らってフラグをオフに戻す
+    setTimeout(() => {
+      isScrollingToAnchor = false;
+    }, 500);
+  } else {
+    isScrollingToAnchor = false;
   }
 }
 
@@ -2781,3 +2819,203 @@ function showMachinePhoto(machineId, returnTarget = 'close') {
     `);
   }, 250);
 }
+
+// ========================================
+// カレンダー関連ヘルパー (開閉、影、スクロール連動、ピッカー)
+// ========================================
+
+function toggleCalendarFold() {
+  const content = document.getElementById('calendar-fold-content');
+  const icon = document.getElementById('calendar-toggle-icon');
+  if (!content || !icon) return;
+
+  calendarCollapsed = !calendarCollapsed;
+  localStorage.setItem('calendar_collapsed', calendarCollapsed ? '1' : '0');
+
+  if (calendarCollapsed) {
+    content.classList.add('collapsed');
+    icon.textContent = '▼ カレンダーを開く';
+  } else {
+    content.classList.remove('collapsed');
+    icon.textContent = '▲ カレンダーを閉じる';
+  }
+}
+
+function setupStickyCalendarShadow() {
+  const wrapper = document.getElementById('sticky-calendar-container-wrapper');
+  if (!wrapper) return;
+
+  const handleScroll = () => {
+    // 画面の一番上からのスクロール量を監視
+    const scrollTop = window.scrollY || document.documentElement.scrollTop;
+    if (scrollTop > 10) {
+      wrapper.classList.add('is-stuck');
+    } else {
+      wrapper.classList.remove('is-stuck');
+    }
+  };
+
+  window.removeEventListener('scroll', handleScroll);
+  window.addEventListener('scroll', handleScroll);
+  handleScroll(); // 初期読み込み時反映
+}
+
+function setupHistoryIntersectionObserver() {
+  if (typeof IntersectionObserver === 'undefined') return;
+
+  const headers = document.querySelectorAll('.history-month-section-header');
+  if (headers.length === 0) return;
+
+  if (window.historyObserver) {
+    window.historyObserver.disconnect();
+  }
+
+  const observerOptions = {
+    root: null,
+    rootMargin: '-120px 0px -80% 0px', // カレンダーの固定ヘッダー(高さを考慮)が上部に来た時に連動
+    threshold: 0
+  };
+
+  window.historyObserver = new IntersectionObserver((entries) => {
+    if (isScrollingToAnchor) return;
+
+    entries.forEach(async (entry) => {
+      if (entry.isIntersecting) {
+        const year = parseInt(entry.target.dataset.year, 10);
+        const month = parseInt(entry.target.dataset.month, 10) - 1; // 0-indexed
+        
+        if (calendarDate.getFullYear() !== year || calendarDate.getMonth() !== month) {
+          const sessions = await getAllSessions();
+          calendarDate = new Date(year, month, 1);
+          const container = document.getElementById('calendar-container');
+          if (container) {
+            container.innerHTML = renderCalendar(calendarDate, sessions);
+          }
+        }
+      }
+    });
+  }, observerOptions);
+
+  headers.forEach(header => window.historyObserver.observe(header));
+}
+
+async function showYearPicker() {
+  const sessions = await getAllSessions();
+  
+  // データが存在するすべての「年」をスキャン
+  const yearsWithData = new Set();
+  sessions.forEach(s => {
+    const d = new Date(s.startTime);
+    yearsWithData.add(d.getFullYear());
+  });
+
+  // 今の年も選択肢に含める
+  const currentYear = new Date().getFullYear();
+  yearsWithData.add(currentYear);
+  yearsWithData.add(currentYear - 1);
+  yearsWithData.add(currentYear - 2);
+
+  const sortedYears = Array.from(yearsWithData).sort((a, b) => b - a); // 降順
+
+  let listHtml = sortedYears.map(yr => {
+    const isActive = yr === calendarDate.getFullYear();
+    return `<div class="year-picker-item ${isActive ? 'active' : ''}" onclick="selectPickerYear(${yr})">${yr}年</div>`;
+  }).join('');
+
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-md">
+      <div class="modal-title" style="margin-bottom:0">年を選択</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕</button>
+    </div>
+    <div class="year-picker-list">${listHtml}</div>
+  `);
+}
+
+async function showMonthPicker(targetYear) {
+  const sessions = await getAllSessions();
+  
+  // 対象の年においてデータが存在する「月」をスキャン
+  const monthsWithData = new Set();
+  sessions.forEach(s => {
+    const d = new Date(s.startTime);
+    if (d.getFullYear() === targetYear) {
+      monthsWithData.add(d.getMonth() + 1); // 1〜12月
+    }
+  });
+
+  let gridHtml = '';
+  for (let m = 1; m <= 12; m++) {
+    const isActive = targetYear === calendarDate.getFullYear() && (m - 1) === calendarDate.getMonth();
+    const hasData = monthsWithData.has(m);
+    
+    // データがある月には中黒(●)フラグを設置
+    const dotFlag = hasData ? '<span class="dot"></span>' : '';
+    
+    gridHtml += `
+      <div class="picker-item ${isActive ? 'active' : ''}" onclick="selectPickerMonth(${targetYear}, ${m})">
+        <div>${m}月</div>
+        ${dotFlag}
+      </div>`;
+  }
+
+  showModal(`
+    <div class="modal-handle"></div>
+    <div class="flex items-center justify-between mb-sm">
+      <div class="modal-title" style="margin-bottom:0">${targetYear}年 月を選択</div>
+      <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕</button>
+    </div>
+    <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:12px; display:flex; align-items:center; gap:4px;">
+      <span style="display:inline-block; width:6px; height:6px; background-color:var(--accent); border-radius:50%;"></span>
+      <span>印のある月にはトレーニングデータがあります。</span>
+    </div>
+    <div class="picker-grid">${gridHtml}</div>
+  `);
+}
+
+async function selectPickerYear(year) {
+  closeModal();
+  // 選択された年の今と同じ月に切り替える
+  const targetDate = new Date(year, calendarDate.getMonth(), 1);
+  const sessions = await getAllSessions();
+  
+  calendarDate = targetDate;
+  const container = document.getElementById('calendar-container');
+  if (container) {
+    container.innerHTML = renderCalendar(targetDate, sessions);
+  }
+  
+  // スクロールを発火
+  triggerMonthScroll(year, calendarDate.getMonth() + 1);
+}
+
+async function selectPickerMonth(year, month) {
+  closeModal();
+  const targetDate = new Date(year, month - 1, 1);
+  const sessions = await getAllSessions();
+  
+  calendarDate = targetDate;
+  const container = document.getElementById('calendar-container');
+  if (container) {
+    container.innerHTML = renderCalendar(targetDate, sessions);
+  }
+  
+  // スクロールを発火
+  triggerMonthScroll(year, month);
+}
+
+function triggerMonthScroll(year, month) {
+  isScrollingToAnchor = true;
+  
+  const targetId = `history-month-${year}-${month}`;
+  const targetEl = document.getElementById(targetId);
+  if (targetEl) {
+    targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      isScrollingToAnchor = false;
+    }, 500);
+  } else {
+    isScrollingToAnchor = false;
+  }
+}
+
