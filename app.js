@@ -2466,12 +2466,21 @@ async function handleImportCSV(event) {
   const files = event.target.files;
   if (!files || files.length === 0) return;
   try {
-    await importDataFromCSV(files);
-    showToast('データのインポートが完了しました', 'success');
-    setTimeout(() => location.reload(), 1500);
+    const text = await files[0].text();
+    const firstLine = text.split('\n')[0] || '';
+    
+    // スプレッドシート形式かどうか判定（1行目に '日付' が含まれ、かつバックアップ用の 'sessionId' が含まれない場合）
+    if (firstLine.includes('日付') && !firstLine.includes('sessionId')) {
+      const res = await importGoogleSheetsCSV(text);
+      showToast(`過去データをインポート完了！\n${res.importedSessions}セッション、${res.importedExercises}種目を追加しました ✅`, 'success');
+    } else {
+      await importDataFromCSV(files);
+      showToast('バックアップデータをインポートしました ✅', 'success');
+    }
+    setTimeout(() => location.reload(), 2000);
   } catch (e) {
     console.error(e);
-    showToast('インポートに失敗しました', 'danger');
+    showToast(`インポートに失敗しました: ${e.message}`, 'danger');
   }
 }
 

@@ -326,3 +326,146 @@ function getDayOfWeek(isoStr) {
   const days = ['日', '月', '火', '水', '木', '金', '土'];
   return days[new Date(isoStr).getDay()];
 }
+
+async function importGoogleSheetsCSV(csvText) {
+  const lines = csvText.split(/\r?\n/).filter(line => line.trim());
+  if (lines.length < 2) {
+    throw new Error("データ行がありません");
+  }
+
+  const colLetterToIdx = (letter) => {
+    return letter.charCodeAt(0) - 65;
+  };
+
+  let importedSessions = 0;
+  let importedExercises = 0;
+
+  await db.transaction('rw', db.sessions, db.exercises, async () => {
+    for (let i = 1; i < lines.length; i++) {
+      const regex = /(?:^|,)(?:"([^"]*(?:""[^"]*)*)"|([^,]*))/g;
+      let match;
+      const cols = [];
+      while ((match = regex.exec(lines[i])) !== null) {
+        cols.push(match[1] !== undefined ? match[1].replace(/""/g, '"') : match[2]);
+      }
+
+      if (cols.length < 2 || !cols[0]) continue;
+
+      const dateStr = cols[0].trim();
+      const timeStr = cols[1] ? cols[1].trim() : '10:00';
+      
+      const fullDateStr = `${dateStr.replace(/\//g, '-')}T${timeStr.padStart(5, '0')}:00`;
+      const startTime = new Date(fullDateStr).getTime();
+      if (isNaN(startTime)) continue;
+
+      let session = await db.sessions
+        .filter(s => Math.abs(new Date(s.startTime).getTime() - startTime) < 30 * 60 * 1000)
+        .first();
+
+      if (!session) {
+        const id = await db.sessions.add({
+          facility: '旭町南地区区民館',
+          startTime: new Date(startTime).toISOString(),
+          endTime: new Date(startTime + 60 * 60 * 1000).toISOString(),
+          note: 'スプレッドシートからインポート'
+        });
+        session = { id, startTime: new Date(startTime).toISOString() };
+        importedSessions++;
+      }
+
+      // 自動でトレッドミル 2.0km 12分 (10km/h) を最初に追加
+      const hasTreadmill = await db.exercises
+        .where({ sessionId: session.id, machineId: 'treadmill' })
+        .first();
+
+      if (!hasTreadmill) {
+        await db.exercises.add({
+          sessionId: session.id,
+          machineId: 'treadmill',
+          machineName: 'トレッドミル',
+          category: 'cardio',
+          type: 'cardio',
+          data: { distance: 2.0, speed: 10.0 }, // 12分
+          createdAt: new Date(startTime).toISOString()
+        });
+        importedExercises++;
+      }
+
+      for (const m of MACHINES) {
+        const colIdx = colLetterToIdx(m.sheetCol);
+        if (colIdx >= cols.length) continue;
+
+        const cellVal = cols[colIdx] ? cols[colIdx].trim() : '';
+        if (!cellVal) continue;
+
+        const existingEx = await db.exercises
+          .where({ sessionId: session.id, machineId: m.id })
+          .first();
+        if (existingEx) continue;
+
+        let exerciseData = null;
+
+        if (m.type === 'strength') {
+          const sets = [];
+          const setStrings = cellVal.split(/[,;\n]/);
+          
+          setStrings.forEach(s => {
+            const clean = s.trim();
+            const weightVal = parseFloat(clean.replace(/[^0-9.]/g, ''));
+            if (!isNaN(weightVal) && weightVal > 0) {
+              // 基本10回3セット
+              for (let setIdx = 0; setIdx < 3; setIdx++) {
+                sets.push({
+                  weight: weightVal,
+                  reps: 10
+                });
+              }
+            }
+          });
+
+          if (sets.length > 0) {
+            exerciseData = sets;
+          }
+        } else {
+          // 有酸素
+          if (m.id === 'treadmill') {
+            const match = cellVal.match(/([0-9.]+)\s*(?:km)?\s*[\/,]\s*([0-9.]+)\s*(?:km\/h)?/i);
+            if (match) {
+              exerciseData = {
+                distance: parseFloat(match[1]) || 2.0,
+                speed: parseFloat(match[2]) || 10.0
+              };
+              const oldTreadmill = await db.exercises.where({ sessionId: session.id, machineId: 'treadmill' }).first();
+              if (oldTreadmill) {
+                await db.exercises.update(oldTreadmill.id, { data: exerciseData });
+              }
+            }
+          } else {
+            const match = cellVal.match(/(?:L)?([0-9.]+)\s*[\/,]\s*([0-9.]+)(?:分|m)?/i);
+            if (match) {
+              exerciseData = {
+                resistance: parseFloat(match[1]) || 5,
+                duration: parseFloat(match[2]) || 30
+              };
+            }
+          }
+        }
+
+        if (exerciseData && m.id !== 'treadmill') {
+          await db.exercises.add({
+            sessionId: session.id,
+            machineId: m.id,
+            machineName: m.name,
+            category: m.category,
+            type: m.type,
+            data: exerciseData,
+            createdAt: new Date(startTime).toISOString()
+          });
+          importedExercises++;
+        }
+      }
+    }
+  });
+
+  return { importedSessions, importedExercises };
+}
