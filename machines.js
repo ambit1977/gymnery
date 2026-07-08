@@ -35,7 +35,7 @@ const MACHINES = [
     ],
     weights: [6.0, 11.0, 16.0, 21.0, 26.0, 31.0, 36.0, 41.0, 46.0, 51.0, 56.0, 61.0, 66.0, 71.0, 76.0, 81.0, 86.0, 91.0, 96.0, 101.0, 106.0],
     hasSets: true,
-    image: 'images/chest_press.jpg',
+    image: 'https://ambit1977.github.io/gymnery/images/chest_press.jpg',
     description: '大胸筋を効果的に鍛えるプレス系のウエイトトレーニングマシンです。シート高さを調整して、グリップが胸の高さになるようにして使用します。',
   },
   {
@@ -63,7 +63,7 @@ const MACHINES = [
     ],
     weights: [2.0, 7.0, 12.0, 17.0, 22.0, 27.0, 32.0, 37.0, 42.0, 47.0, 52.0, 57.0, 62.0, 67.0, 72.0, 77.0, 82.0, 87.0, 92.0, 97.0, 102.0],
     hasSets: true,
-    image: 'images/lat_pulldown.jpg',
+    image: 'https://ambit1977.github.io/gymnery/images/lat_pulldown.jpg',
     description: '背中（広背筋・大円筋）を鍛える引く動作のマシンです。バーを鎖骨に向けて引き下ろします。',
   },
   {
@@ -119,7 +119,7 @@ const MACHINES = [
     ],
     weights: [8.0, 18.0, 28.0, 38.0, 48.0, 58.0, 68.0, 78.0, 88.0, 98.0, 108.0, 118.0, 128.0, 138.0, 148.0, 158.0, 168.0, 178.0, 188.0, 198.0, 208.0],
     hasSets: true,
-    image: 'images/leg_press.jpg',
+    image: 'https://ambit1977.github.io/gymnery/images/leg_press.jpg',
     description: '大腿四頭筋、大臀筋など下半身全体を鍛える強力なマシンです。シートの位置を調整し、膝が90度近く曲がる深さから押し込みます。',
   },
   {
@@ -270,7 +270,7 @@ const MACHINES = [
       { key: 'speed', label: '速度', unit: 'km/h', type: 'number', step: 0.1, min: 0 },
     ],
     hasSets: false,
-    image: 'images/treadmill.jpg',
+    image: 'https://ambit1977.github.io/gymnery/images/treadmill.jpg',
     description: 'ウォーキングやランニングができる有酸素マシンです。緊急停止用の安全クリップを装着して使用します。',
   },
   {
@@ -296,7 +296,7 @@ const MACHINES = [
       { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 },
     ],
     hasSets: false,
-    image: 'images/bike.jpg',
+    image: 'https://ambit1977.github.io/gymnery/images/bike.jpg',
     description: '関節への負担が少ない有酸素運動ができる固定自転車です。シートの高さを調整し、ペダルが最下部にきたときに膝が軽く曲がる位置にします。',
   },
 ];
