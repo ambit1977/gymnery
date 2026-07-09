@@ -196,14 +196,46 @@ async function gsheetFetchAllRows(spreadsheetId, sheetName) {
   }
 }
 
+// 安全な日付パース関数 (iOS / タイムゾーン対応)
+function safeParseDate(str) {
+  if (!str) return null;
+  const s = str.trim();
+  if (s.includes('T')) {
+    // ISOString 形式 (2026-07-09T11:21:00.000Z) の場合はそのままパース
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return d;
+  }
+  
+  // "2026/07/09 20:21" や "2026-07-09 20:21:00" などの書式を分解パース
+  const parts = s.split(/[\sT]/);
+  const datePart = parts[0] || '';
+  const timePart = parts[1] || '';
+  
+  const dParts = datePart.split(/[-\/]/);
+  const tParts = timePart.split(':');
+  
+  if (dParts.length < 3) return new Date(s); // フォールバック
+  
+  const year = parseInt(dParts[0], 10);
+  const month = parseInt(dParts[1], 10) - 1;
+  const day = parseInt(dParts[2], 10);
+  
+  const hour = tParts[0] ? parseInt(tParts[0], 10) : 0;
+  const minute = tParts[1] ? parseInt(tParts[1], 10) : 0;
+  const second = tParts[2] ? parseInt(tParts[2], 10) : 0;
+  
+  return new Date(year, month, day, hour, minute, second);
+}
+
+// リモートIDとローカルIDのマッピングを保持するグローバルオブジェクト
+let remoteSessionIdToLocalIdMap = new Map();
+
 // 1. セッションの双方向同期
 async function gsheetSyncSessions(spreadsheetId) {
   const localItems = await db.sessions.toArray();
   const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'sessions');
 
-  const localMap = new Map(localItems.map(s => [String(s.id), s]));
   const remoteMap = new Map();
-  
   remoteRows.forEach(row => {
     if (!row[0]) return;
     remoteMap.set(String(row[0]), {
@@ -216,30 +248,84 @@ async function gsheetSyncSessions(spreadsheetId) {
   });
 
   let localAdded = 0;
-  let remoteToAdd = [];
+  remoteSessionIdToLocalIdMap.clear();
 
   // スプレッドシート -> ローカルDB (マージ・追加)
-  for (const [idStr, remoteItem] of remoteMap.entries()) {
-    const localItem = localMap.get(idStr);
+  for (const [remoteIdStr, remoteItem] of remoteMap.entries()) {
+    const remoteParsedStart = safeParseDate(remoteItem.startTime);
+    if (!remoteParsedStart) continue;
+    const remoteStartMs = remoteParsedStart.getTime();
+
+    // 開始時間(誤差3秒以内)で同一セッションがあるか検索
+    let localItem = localItems.find(s => {
+      const localStart = safeParseDate(s.startTime);
+      return localStart && Math.abs(localStart.getTime() - remoteStartMs) < 3000;
+    });
+
     if (!localItem) {
-      await db.sessions.put(remoteItem);
+      // ローカルに存在しないセッションなので、自動増分IDで新規追加
+      const newLocalId = await db.sessions.add({
+        facility: remoteItem.facility,
+        startTime: remoteParsedStart.toISOString(),
+        endTime: remoteItem.endTime ? safeParseDate(remoteItem.endTime).toISOString() : null,
+        note: remoteItem.note
+      });
+      remoteSessionIdToLocalIdMap.set(remoteIdStr, newLocalId);
       localAdded++;
     } else {
-      // 重複時は開始時間を比較し、より最新のデータや終了時間がある方を優先
-      const hasUpdates = (remoteItem.endTime && !localItem.endTime) || 
-                         (remoteItem.note && !localItem.note);
-      if (hasUpdates) {
+      // 存在する場合はIDの対応関係を記録
+      remoteSessionIdToLocalIdMap.set(remoteIdStr, localItem.id);
+
+      // ローカル側でトレーニングが終了して終了時間が記録されているが、リモートにまだない場合、
+      // あるいはリモート側で更新されている場合は同期
+      const localEnd = safeParseDate(localItem.endTime);
+      const remoteEnd = safeParseDate(remoteItem.endTime);
+      
+      const localEndMs = localEnd ? localEnd.getTime() : 0;
+      const remoteEndMs = remoteEnd ? remoteEnd.getTime() : 0;
+
+      if (remoteEndMs > 0 && localEndMs === 0) {
+        // リモートでセッションが終了している場合はローカルを更新
         await db.sessions.update(localItem.id, {
-          endTime: remoteItem.endTime || localItem.endTime,
-          note: remoteItem.note || localItem.note,
+          endTime: remoteParsedStart.getTime() > remoteEndMs ? new Date(remoteStartMs + 60 * 60 * 1000).toISOString() : remoteEnd.toISOString(),
+          note: remoteItem.note || localItem.note
         });
+      } else if (localEndMs > 0 && remoteEndMs === 0) {
+        // ローカルで終了しているがリモートで終了していない場合は、後続の「アップロード」対象にするため無視（リモート更新処理は下で行う）
       }
     }
   }
 
-  // ローカルDB -> スプレッドシート (不足分を抽出)
-  for (const [idStr, localItem] of localMap.entries()) {
-    if (!remoteMap.has(idStr)) {
+  // ローカルDBに存在するアクティブな変更をスプレッドシートに反映 (アップロード)
+  const remoteToAdd = [];
+  const remoteToUpdate = [];
+
+  for (const localItem of localItems) {
+    // 自身が現在トレーニング中のセッションはスプレッドシートへの早期送信を避ける (セッション終了時に送る)
+    if (localItem.id === activeSessionId && !localItem.endTime) continue;
+
+    // 開始時間でスプレッドシート側のセッションがあるかチェック
+    const localStartMs = safeParseDate(localItem.startTime).getTime();
+    let remoteItem = null;
+    let remoteRowIdx = -1;
+
+    remoteRows.forEach((row, idx) => {
+      if (!row[0]) return;
+      const remoteStart = safeParseDate(row[2]);
+      if (remoteStart && Math.abs(remoteStart.getTime() - localStartMs) < 3000) {
+        remoteItem = {
+          id: Number(row[0]),
+          facility: row[1],
+          startTime: row[2],
+          endTime: row[3],
+          note: row[4]
+        };
+        remoteRowIdx = idx + 2; // スプレッドシートの1ベース行インデックス (ヘッダ含む)
+      }
+    });
+
+    if (!remoteItem) {
+      // スプレッドシートに存在しないので新規追加
       remoteToAdd.push([
         localItem.id,
         localItem.facility || '',
@@ -247,6 +333,17 @@ async function gsheetSyncSessions(spreadsheetId) {
         localItem.endTime || '',
         localItem.note || '',
       ]);
+    } else {
+      // 存在し、かつローカル側でセッションが終了しているのにスプレッドシート側が終了していない場合更新
+      const localEnd = safeParseDate(localItem.endTime);
+      const remoteEnd = safeParseDate(remoteItem.endTime);
+
+      if (localEnd && !remoteEnd) {
+        remoteToUpdate.push({
+          range: `sessions!D${remoteRowIdx}:E${remoteRowIdx}`, // endTime と note を更新
+          values: [[localItem.endTime || '', localItem.note || '']]
+        });
+      }
     }
   }
 
@@ -257,6 +354,14 @@ async function gsheetSyncSessions(spreadsheetId) {
     );
   }
 
+  // スプレッドシート側の終了時刻・メモの一括更新を実行
+  if (remoteToUpdate.length > 0) {
+    await sheetsRequest('POST', `/${spreadsheetId}/values:batchUpdate`, {
+      valueInputOption: 'RAW',
+      data: remoteToUpdate
+    });
+  }
+
   return { localAdded, remoteAdded: remoteToAdd.length };
 }
 
@@ -265,9 +370,7 @@ async function gsheetSyncExercises(spreadsheetId) {
   const localItems = await db.exercises.toArray();
   const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'exercises');
 
-  const localMap = new Map(localItems.map(e => [String(e.id), e]));
   const remoteMap = new Map();
-
   remoteRows.forEach(row => {
     if (!row[0]) return;
     let dataParsed = [];
@@ -291,31 +394,83 @@ async function gsheetSyncExercises(spreadsheetId) {
   });
 
   let localAdded = 0;
-  let remoteToAdd = [];
+  const remoteToAdd = [];
 
   // スプレッドシート -> ローカルDB (追加)
-  for (const [idStr, remoteItem] of remoteMap.entries()) {
-    if (!localMap.has(idStr)) {
-      await db.exercises.put(remoteItem);
+  for (const [remoteIdStr, remoteItem] of remoteMap.entries()) {
+    // リモートの sessionId に対応するローカルの sessionId を取得
+    const mappedLocalSessionId = remoteSessionIdToLocalIdMap.get(String(remoteItem.sessionId));
+    if (!mappedLocalSessionId) {
+      continue;
+    }
+
+    const remoteCreatedMs = safeParseDate(remoteItem.createdAt).getTime();
+
+    // 同一の種目データ(sessionId, machineId, 作成日時がほぼ一致)がローカルにあるかチェック
+    const isExist = localItems.some(e => {
+      const localCreated = safeParseDate(e.createdAt);
+      return e.sessionId === mappedLocalSessionId &&
+             e.machineId === remoteItem.machineId &&
+             localCreated && Math.abs(localCreated.getTime() - remoteCreatedMs) < 3000;
+    });
+
+    if (!isExist) {
+      await db.exercises.add({
+        sessionId: mappedLocalSessionId,
+        machineId: remoteItem.machineId,
+        machineName: remoteItem.machineName,
+        category: remoteItem.category,
+        type: remoteItem.type,
+        data: remoteItem.data,
+        saveMode: remoteItem.saveMode,
+        note: remoteItem.note,
+        createdAt: safeParseDate(remoteItem.createdAt).toISOString()
+      });
       localAdded++;
     }
   }
 
   // ローカルDB -> スプレッドシート (追加)
-  for (const [idStr, localItem] of localMap.entries()) {
-    if (!remoteMap.has(idStr)) {
-      remoteToAdd.push([
-        localItem.id,
-        localItem.sessionId,
-        localItem.machineId,
-        localItem.machineName || '',
-        localItem.category || '',
-        localItem.type || '',
-        JSON.stringify(localItem.data),
-        localItem.saveMode || '',
-        localItem.note || '',
-        localItem.createdAt || '',
-      ]);
+  for (const localItem of localItems) {
+    if (localItem.sessionId === activeSessionId) continue; // トレーニング中は送信しない
+
+    const localCreated = safeParseDate(localItem.createdAt);
+    if (!localCreated) continue;
+    const localCreatedMs = localCreated.getTime();
+
+    // スプレッドシート側に登録済みかチェック
+    const isExist = Array.from(remoteMap.values()).some(e => {
+      const mappedLocalSessionId = remoteSessionIdToLocalIdMap.get(String(e.sessionId));
+      const remoteCreated = safeParseDate(e.createdAt);
+      return mappedLocalSessionId === localItem.sessionId &&
+             e.machineId === localItem.machineId &&
+             remoteCreated && Math.abs(remoteCreated.getTime() - localCreatedMs) < 3000;
+    });
+
+    if (!isExist) {
+      // スプレッドシート側のセッションID（リモートID）を逆引き
+      let remoteSessionId = null;
+      for (const [rId, lId] of remoteSessionIdToLocalIdMap.entries()) {
+        if (lId === localItem.sessionId) {
+          remoteSessionId = Number(rId);
+          break;
+        }
+      }
+      
+      if (remoteSessionId) {
+        remoteToAdd.push([
+          localItem.id,
+          remoteSessionId,
+          localItem.machineId,
+          localItem.machineName || '',
+          localItem.category || '',
+          localItem.type || '',
+          JSON.stringify(localItem.data),
+          localItem.saveMode || '',
+          localItem.note || '',
+          localItem.createdAt || '',
+        ]);
+      }
     }
   }
 
@@ -393,8 +548,10 @@ async function gsheetsSyncAll() {
   if (!spreadsheetId) throw new Error('スプレッドシートIDが設定されていません。');
 
   await gsheetEnsureSheets(spreadsheetId);
-  const [s, e, b] = await Promise.all([
-    gsheetSyncSessions(spreadsheetId),
+  
+  // sessions を先に完全に完了させてから exercises を処理する
+  const s = await gsheetSyncSessions(spreadsheetId);
+  const [e, b] = await Promise.all([
     gsheetSyncExercises(spreadsheetId),
     gsheetSyncBody(spreadsheetId),
   ]);
