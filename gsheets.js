@@ -201,12 +201,10 @@ function safeParseDate(str) {
   if (!str) return null;
   const s = str.trim();
   if (s.includes('T')) {
-    // ISOString 形式 (2026-07-09T11:21:00.000Z) の場合はそのままパース
     const d = new Date(s);
     if (!isNaN(d.getTime())) return d;
   }
   
-  // "2026/07/09 20:21" や "2026-07-09 20:21:00" などの書式を分解パース
   const parts = s.split(/[\sT]/);
   const datePart = parts[0] || '';
   const timePart = parts[1] || '';
@@ -214,7 +212,7 @@ function safeParseDate(str) {
   const dParts = datePart.split(/[-\/]/);
   const tParts = timePart.split(':');
   
-  if (dParts.length < 3) return new Date(s); // フォールバック
+  if (dParts.length < 3) return new Date(s);
   
   const year = parseInt(dParts[0], 10);
   const month = parseInt(dParts[1], 10) - 1;
@@ -227,12 +225,18 @@ function safeParseDate(str) {
   return new Date(year, month, day, hour, minute, second);
 }
 
+// タイムゾーンによる時間のズレ(9時間など)を無視して、年月日・時分の一致で同一判定を行うためのヘルパー
+function getLocalYMDHMString(date) {
+  if (!date || isNaN(date.getTime())) return '';
+  return `${date.getFullYear()}-${date.getMonth() + 1}-${date.getDate()} ${date.getHours()}:${date.getMinutes()}`;
+}
+
 // リモートIDとローカルIDのマッピングを保持するグローバルオブジェクト
 let remoteSessionIdToLocalIdMap = new Map();
 
 // 1. セッションの双方向同期
 async function gsheetSyncSessions(spreadsheetId) {
-  const localItems = await db.sessions.toArray();
+  let localItems = await db.sessions.toArray();
   const remoteRows = await gsheetFetchAllRows(spreadsheetId, 'sessions');
 
   const remoteMap = new Map();
@@ -247,6 +251,30 @@ async function gsheetSyncSessions(spreadsheetId) {
     });
   });
 
+  // 【重複クリーンアップ】ローカル側で同一年月日のセッションが複数重複してしまっている場合、
+  // 0種目の不要な方を自動削除（クリーンアップ）する
+  const seenYMDHM = new Set();
+  const idsToDelete = [];
+  for (const s of localItems) {
+    const sDate = safeParseDate(s.startTime);
+    if (!sDate) continue;
+    const ymdhm = getLocalYMDHMString(sDate);
+    if (seenYMDHM.has(ymdhm)) {
+      // 既に同じ日時のセッションが存在する場合、種目数が少ない方（特に0種目のもの）を削除対象にする
+      const existingExs = await db.exercises.where('sessionId').equals(s.id).count();
+      if (existingExs === 0) {
+        idsToDelete.push(s.id);
+      }
+    } else {
+      seenYMDHM.add(ymdhm);
+    }
+  }
+  if (idsToDelete.length > 0) {
+    await db.sessions.where('id').anyOf(idsToDelete).delete();
+    // 最新のローカルデータを再取得
+    localItems = await db.sessions.toArray();
+  }
+
   let localAdded = 0;
   remoteSessionIdToLocalIdMap.clear();
 
@@ -254,12 +282,12 @@ async function gsheetSyncSessions(spreadsheetId) {
   for (const [remoteIdStr, remoteItem] of remoteMap.entries()) {
     const remoteParsedStart = safeParseDate(remoteItem.startTime);
     if (!remoteParsedStart) continue;
-    const remoteStartMs = remoteParsedStart.getTime();
 
-    // 開始時間(誤差3秒以内)で同一セッションがあるか検索
+    // 日時の文字列表現(分単位まで)で同一セッションがあるか検索
+    const remoteYMDHM = getLocalYMDHMString(remoteParsedStart);
     let localItem = localItems.find(s => {
       const localStart = safeParseDate(s.startTime);
-      return localStart && Math.abs(localStart.getTime() - remoteStartMs) < 3000;
+      return localStart && getLocalYMDHMString(localStart) === remoteYMDHM;
     });
 
     if (!localItem) {
@@ -290,11 +318,9 @@ async function gsheetSyncSessions(spreadsheetId) {
 
       if (isEndTimeBroken || (remoteEndMs > 0 && localEndMs === 0) || (remoteEndMs > 0 && localEndMs !== remoteEndMs)) {
         await db.sessions.update(localItem.id, {
-          endTime: remoteEnd ? remoteEnd.toISOString() : new Date(remoteStartMs + 60 * 60 * 1000).toISOString(),
+          endTime: remoteEnd ? remoteEnd.toISOString() : new Date(localStartMs + 60 * 60 * 1000).toISOString(),
           note: remoteItem.note || localItem.note
         });
-      } else if (localEndMs > 0 && remoteEndMs === 0) {
-        // ローカルで終了しているがリモートで終了していない場合は、後続の「アップロード」対象にするため無視（リモート更新処理は下で行う）
       }
     }
   }
@@ -308,14 +334,16 @@ async function gsheetSyncSessions(spreadsheetId) {
     if (localItem.id === activeSessionId && !localItem.endTime) continue;
 
     // 開始時間でスプレッドシート側のセッションがあるかチェック
-    const localStartMs = safeParseDate(localItem.startTime).getTime();
+    const localStart = safeParseDate(localItem.startTime);
+    if (!localStart) continue;
+    const localYMDHM = getLocalYMDHMString(localStart);
     let remoteItem = null;
     let remoteRowIdx = -1;
 
     remoteRows.forEach((row, idx) => {
       if (!row[0]) return;
       const remoteStart = safeParseDate(row[2]);
-      if (remoteStart && Math.abs(remoteStart.getTime() - localStartMs) < 3000) {
+      if (remoteStart && getLocalYMDHMString(remoteStart) === localYMDHM) {
         remoteItem = {
           id: Number(row[0]),
           facility: row[1],
