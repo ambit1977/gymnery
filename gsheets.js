@@ -276,18 +276,21 @@ async function gsheetSyncSessions(spreadsheetId) {
       // 存在する場合はIDの対応関係を記録
       remoteSessionIdToLocalIdMap.set(remoteIdStr, localItem.id);
 
-      // ローカル側でトレーニングが終了して終了時間が記録されているが、リモートにまだない場合、
-      // あるいはリモート側で更新されている場合は同期
+      const localStart = safeParseDate(localItem.startTime);
+      const localStartMs = localStart ? localStart.getTime() : 0;
       const localEnd = safeParseDate(localItem.endTime);
       const remoteEnd = safeParseDate(remoteItem.endTime);
       
       const localEndMs = localEnd ? localEnd.getTime() : 0;
       const remoteEndMs = remoteEnd ? remoteEnd.getTime() : 0;
 
-      if (remoteEndMs > 0 && localEndMs === 0) {
-        // リモートでセッションが終了している場合はローカルを更新
+      // ローカルの終了時刻が開始時刻より過去になっている（壊れている）場合、
+      // またはスプレッドシート側に正しい終了時刻が入っているがローカルが未設定・不一致の場合は上書き修復
+      const isEndTimeBroken = localEnd && localEndMs <= localStartMs;
+
+      if (isEndTimeBroken || (remoteEndMs > 0 && localEndMs === 0) || (remoteEndMs > 0 && localEndMs !== remoteEndMs)) {
         await db.sessions.update(localItem.id, {
-          endTime: remoteParsedStart.getTime() > remoteEndMs ? new Date(remoteStartMs + 60 * 60 * 1000).toISOString() : remoteEnd.toISOString(),
+          endTime: remoteEnd ? remoteEnd.toISOString() : new Date(remoteStartMs + 60 * 60 * 1000).toISOString(),
           note: remoteItem.note || localItem.note
         });
       } else if (localEndMs > 0 && remoteEndMs === 0) {
@@ -672,6 +675,10 @@ async function gsheetsSyncAllUI() {
       );
     }
     renderSettings(document.getElementById('main-content'));
+    // 画面を自動リロードしてIndexedDBの最新修正データを強制ロードする
+    setTimeout(() => {
+      location.reload();
+    }, 1500);
   } catch (e) {
     console.error(e);
     showToast(`同期エラー: ${e.message}`, 'danger');
