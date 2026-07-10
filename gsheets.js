@@ -663,7 +663,12 @@ function gsheetsSettingsHtml() {
           ${!authed ? 'disabled style="flex:1;opacity:0.4"' : 'style="flex:1"'}>今すぐ同期</button>
       </div>
 
-      ${authed ? `<p class="text-xs text-muted mt-sm" style="text-align:center">✅ Google アカウント連携済み</p>` : ''}
+      ${authed ? `
+        <div style="margin-top:12px; display:flex; gap:8px;">
+          <button class="btn btn-ghost btn-sm" onclick="gsheetsShowRawDataLog()" style="flex:1; border:1px dashed var(--border-color); font-size:0.7rem; color:var(--text-secondary);">🔍 スプシの中身を確認・修復</button>
+        </div>
+        <p class="text-xs text-muted mt-sm" style="text-align:center">✅ Google アカウント連携済み</p>
+      ` : ''}
     </div>
   `;
 }
@@ -804,5 +809,152 @@ async function gsheetsDeleteSessionAndExercises(sessionId) {
   } catch (e) {
     console.error('Failed to delete rows from Google Sheets:', e);
     showToast(`Google Sheetsでの削除同期に失敗しました: ${e.message}`, 'danger');
+  }
+}
+
+// ========================================
+// メンテナンス・デバッグ用 (スプレッドシート確認とクリーンアップ)
+// ========================================
+
+async function gsheetsShowRawDataLog() {
+  const spreadsheetId = localStorage.getItem('gs_spreadsheet_id');
+  if (!spreadsheetId) {
+    showToast('スプレッドシートIDがありません。', 'danger');
+    return;
+  }
+  showToast('スプレッドシートからデータを取得中...⏳', '');
+  try {
+    const [sessions, exercises] = await Promise.all([
+      gsheetFetchAllRows(spreadsheetId, 'sessions'),
+      gsheetFetchAllRows(spreadsheetId, 'exercises')
+    ]);
+
+    let sessionRowsHtml = sessions.map((row, idx) => {
+      return `<tr style="border-bottom:1px solid var(--border-color); font-size:0.75rem;">
+        <td style="padding:6px;">${row[0]}</td>
+        <td style="padding:6px; font-weight:bold;">${row[2]}</td>
+        <td style="padding:6px; color:var(--text-secondary);">${row[3] || '空'}</td>
+        <td style="padding:6px; font-size:0.65rem;">${row[4] || ''}</td>
+      </tr>`;
+    }).join('');
+
+    let exRowsHtml = exercises.map((row, idx) => {
+      return `<tr style="border-bottom:1px solid var(--border-color); font-size:0.7rem;">
+        <td style="padding:4px;">${row[1]} (セッション)</td>
+        <td style="padding:4px; font-weight:bold;">${row[3]}</td>
+        <td style="padding:4px; font-size:0.6rem; color:var(--text-secondary); word-break:break-all;">${row[6] || ''}</td>
+      </tr>`;
+    }).join('');
+
+    showModal(`
+      <div class="modal-handle"></div>
+      <div class="flex items-center justify-between mb-md">
+        <div class="modal-title" style="margin-bottom:0">スプレッドシートの登録生データ</div>
+        <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
+      </div>
+      
+      <div style="font-size:0.8rem; font-weight:bold; margin-bottom:6px; color:var(--accent);">■ sessions シート (${sessions.length}行)</div>
+      <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: var(--space-md);">
+        <table style="width:100%; border-collapse:collapse; text-align:left;">
+          <thead>
+            <tr style="background:var(--bg-secondary); font-size:0.7rem; border-bottom:1px solid var(--border-color);">
+              <th style="padding:6px;">ID</th>
+              <th style="padding:6px;">開始日時</th>
+              <th style="padding:6px;">終了日時</th>
+              <th style="padding:6px;">メモ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sessionRowsHtml || '<tr><td colspan="4" style="padding:12px; text-align:center;">データなし</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="font-size:0.8rem; font-weight:bold; margin-bottom:6px; color:var(--accent);">■ exercises シート (${exercises.length}行)</div>
+      <div style="max-height: 180px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); margin-bottom: var(--space-md);">
+        <table style="width:100%; border-collapse:collapse; text-align:left;">
+          <thead>
+            <tr style="background:var(--bg-secondary); font-size:0.7rem; border-bottom:1px solid var(--border-color);">
+              <th style="padding:4px;">セッションID</th>
+              <th style="padding:4px;">種目名</th>
+              <th style="padding:4px;">データ値</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${exRowsHtml || '<tr><td colspan="3" style="padding:12px; text-align:center;">データなし</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+      
+      <div class="flex gap-sm">
+        <button class="btn btn-secondary btn-block" onclick="closeModal()">閉じる</button>
+        <button class="btn btn-danger btn-block" onclick="closeModal(); gsheetsCleanRemoteDuplicates();" style="background:var(--danger); border-color:var(--danger)">スプシ側の重複行を修復削除</button>
+      </div>
+    `);
+  } catch (e) {
+    console.error(e);
+    showToast(`スプレッドシート読み込みエラー: ${e.message}`, 'danger');
+  }
+}
+
+async function gsheetsCleanRemoteDuplicates() {
+  const spreadsheetId = localStorage.getItem('gs_spreadsheet_id');
+  if (!spreadsheetId) return;
+  showToast('スプレッドシートのクリーンアップ中...⏳', '');
+
+  try {
+    const meta = await sheetsRequest('GET', `/${spreadsheetId}?fields=sheets`);
+    const sheetMap = {};
+    meta.sheets.forEach(s => {
+      sheetMap[s.properties.title] = s.properties.sheetId;
+    });
+
+    const sessionRows = await gsheetFetchAllRows(spreadsheetId, 'sessions');
+    const seenYMDHM = new Map();
+    const requests = [];
+
+    // 重複するセッション行（年月日時間が同じ）を抽出する
+    // 重複した行のうち、後から登録された「中身が空・狂っている可能性のある行」を削除対象にする
+    sessionRows.forEach((row, idx) => {
+      if (!row[0]) return;
+      const start = safeParseDate(row[2]);
+      if (!start) return;
+      const ymdhm = getLocalYMDHMString(start);
+      
+      if (seenYMDHM.has(ymdhm)) {
+        // 重複があった場合、前に登録された方(初発)を残し、今回の行(idx + 1)を削除リストに追加
+        requests.push(idx + 1);
+      } else {
+        seenYMDHM.set(ymdhm, idx + 1);
+      }
+    });
+
+    if (requests.length > 0 && sheetMap['sessions'] !== undefined) {
+      // 降順にソートして削除リクエストを作成 (行ずれ防止)
+      requests.sort((a, b) => b - a);
+      const batchRequests = requests.map(rowIdx => ({
+        deleteDimension: {
+          range: {
+            sheetId: sheetMap['sessions'],
+            dimension: 'ROWS',
+            startIndex: rowIdx,
+            endIndex: rowIdx + 1
+          }
+        }
+      }));
+
+      await sheetsRequest('POST', `/${spreadsheetId}:batchUpdate`, { requests: batchRequests });
+      showToast(`スプシ側の重複したセッションデータ ${requests.length} 件を修復・削除しました ✅`, 'success');
+      
+      // ローカルDBも再度同期を実行して名寄せを確実にする
+      setTimeout(() => {
+        gsheetsSyncAllUI();
+      }, 1500);
+    } else {
+      showToast('スプレッドシート側に重複したセッションはありません ✨', 'success');
+    }
+  } catch (e) {
+    console.error(e);
+    showToast(`クリーンアップエラー: ${e.message}`, 'danger');
   }
 }
