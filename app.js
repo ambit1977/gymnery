@@ -551,6 +551,20 @@ async function doEndSession() {
   const note = document.getElementById('session-note')?.value || '';
   await endSession(activeSessionId, note);
   const sid = activeSessionId;
+
+  // 種目が0件のセッションは保存しない（削除する）
+  const exerciseCount = await db.exercises.where('sessionId').equals(sid).count();
+  if (exerciseCount === 0) {
+    await deleteSession(sid);
+    activeSessionId = null;
+    localStorage.removeItem('activeSessionId');
+    clearTimer();
+    closeModal();
+    showToast('種目が記録されなかったため、セッションを破棄しました', '');
+    navigateTo('home');
+    return;
+  }
+
   activeSessionId = null;
   localStorage.removeItem('activeSessionId');
   clearTimer();

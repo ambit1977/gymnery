@@ -333,6 +333,10 @@ async function gsheetSyncSessions(spreadsheetId) {
     // 自身が現在トレーニング中のセッションはスプレッドシートへの早期送信を避ける (セッション終了時に送る)
     if (localItem.id === activeSessionId && !localItem.endTime) continue;
 
+    // 種目が0件のセッションはアップロードしない
+    const exCount = await db.exercises.where('sessionId').equals(localItem.id).count();
+    if (exCount === 0 && localItem.endTime) continue;
+
     // 開始時間でスプレッドシート側のセッションがあるかチェック
     const localStart = safeParseDate(localItem.startTime);
     if (!localStart) continue;
@@ -888,7 +892,7 @@ async function gsheetsShowRawDataLog() {
       
       <div class="flex gap-sm">
         <button class="btn btn-secondary btn-block" onclick="closeModal()">閉じる</button>
-        <button class="btn btn-danger btn-block" onclick="closeModal(); gsheetsCleanRemoteDuplicates();" style="background:var(--danger); border-color:var(--danger)">スプシ側の重複行を修復削除</button>
+        <button class="btn btn-danger btn-block" onclick="closeModal(); gsheetsCleanRemoteDuplicates();" style="background:var(--danger); border-color:var(--danger); color:#fff;">スプシ側の重複行を修復削除</button>
       </div>
     `);
   } catch (e) {
