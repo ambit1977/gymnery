@@ -802,6 +802,26 @@ textarea.input {
   50% { opacity: 0.5; }
 }
 
+/* インターバルタイマー用スタイル (#interval-display は裸クラスで適用) */
+#interval-display.timer-safe {
+  color: var(--accent);
+}
+#interval-display.timer-warning {
+  color: #ffb347;
+}
+#interval-display.timer-danger {
+  color: #ff4444;
+  animation: timerPulse 1s ease-in-out infinite;
+}
+#interval-display.interval-flash {
+  animation: intervalFlash 0.5s ease-in-out 6;
+}
+
+@keyframes intervalFlash {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.1; transform: scale(1.05); }
+}
+
 /* Timer progress bar */
 .timer-progress {
   width: 100%;

@@ -9,6 +9,98 @@ let alertedMinutes = new Set();
 let chartInstances = {};
 let intervalTimerId = null;
 let intervalTimerEndTime = 0;
+let wakeLockSentinel = null;
+let intervalBeepAudio = null;
+
+// ========================================
+// Screen Wake Lock (インターバル中のスリープ防止)
+// ========================================
+async function requestWakeLock() {
+  if (!('wakeLock' in navigator)) return;
+  try {
+    if (wakeLockSentinel) return;
+    wakeLockSentinel = await navigator.wakeLock.request('screen');
+    wakeLockSentinel.addEventListener('release', () => {
+      wakeLockSentinel = null;
+    });
+  } catch (e) {
+    console.warn('Wake Lock request failed:', e);
+  }
+}
+
+function releaseWakeLock() {
+  if (wakeLockSentinel) {
+    wakeLockSentinel.release();
+    wakeLockSentinel = null;
+  }
+}
+
+// 画面復帰時にWake Lockを再取得
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && intervalTimerId) {
+    requestWakeLock();
+  }
+});
+
+// ========================================
+// インターバル終了音 (WAVプログラム生成)
+// ========================================
+function ensureIntervalBeepAudio() {
+  if (intervalBeepAudio) return intervalBeepAudio;
+
+  const sampleRate = 22050;
+  const freq = 880;
+  const beepDuration = 0.2;
+  const gapDuration = 0.15;
+  const beepCount = 3;
+
+  const beepSamples = Math.floor(sampleRate * beepDuration);
+  const gapSamples = Math.floor(sampleRate * gapDuration);
+  const totalSamples = beepCount * beepSamples + (beepCount - 1) * gapSamples;
+
+  const buffer = new ArrayBuffer(44 + totalSamples * 2);
+  const view = new DataView(buffer);
+
+  const writeString = (offset, str) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  };
+  writeString(0, 'RIFF');
+  view.setUint32(4, 36 + totalSamples * 2, true);
+  writeString(8, 'WAVE');
+  writeString(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, 'data');
+  view.setUint32(40, totalSamples * 2, true);
+
+  let offset = 44;
+  for (let b = 0; b < beepCount; b++) {
+    for (let i = 0; i < beepSamples; i++) {
+      const t = i / sampleRate;
+      const envelope = Math.min(1, i / 200, (beepSamples - i) / 200);
+      const sample = Math.sin(2 * Math.PI * freq * t) * 0.6 * envelope;
+      view.setInt16(offset, sample * 32767, true);
+      offset += 2;
+    }
+    if (b < beepCount - 1) {
+      for (let i = 0; i < gapSamples; i++) {
+        view.setInt16(offset, 0, true);
+        offset += 2;
+      }
+    }
+  }
+
+  const blob = new Blob([buffer], { type: 'audio/wav' });
+  const url = URL.createObjectURL(blob);
+  intervalBeepAudio = new Audio(url);
+  intervalBeepAudio.volume = 1.0;
+  return intervalBeepAudio;
+}
 
 // ========================================
 // 初期化
@@ -993,6 +1085,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
   }
 
   if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
+  releaseWakeLock();
   closeModal();
 
   // スプレッドシート自動同期のトリガー
@@ -1016,11 +1109,21 @@ function startIntervalTimer(machineId) {
   
   container.style.display = 'flex';
   display.className = 'timer-safe';
-  
+  display.classList.remove('interval-flash');
+
+  // 既存タイマーのクリーンアップ（連打対策）
+  if (intervalTimerId) clearInterval(intervalTimerId);
+  releaseWakeLock();
+
+  // Wake Lock 取得（スリープ防止）
+  requestWakeLock();
+
+  // 音声アンロック（ユーザージェスチャのコンテキスト内で実行）
+  const audio = ensureIntervalBeepAudio();
+  audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
+
   // デフォルト1分(60秒)で開始
   intervalTimerEndTime = Date.now() + 60 * 1000;
-  if (intervalTimerId) clearInterval(intervalTimerId);
-  
   let hasTriggeredEnd = false;
   
   const updateDisplay = () => {
@@ -1030,7 +1133,28 @@ function startIntervalTimer(machineId) {
       // タイムアップ時（最初の一度だけアラートと行追加を実行）
       if (!hasTriggeredEnd) {
         hasTriggeredEnd = true;
+
+        // 🔔 音声アラート（iOSサイレントスイッチでも鳴る）
+        audio.currentTime = 0;
+        audio.play().catch(() => {
+          // フォールバック: Web Audio oscillator
+          try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            osc.frequency.value = 880;
+            osc.connect(ctx.destination);
+            osc.start();
+            setTimeout(() => osc.stop(), 500);
+          } catch (e) {}
+        });
+
+        // 📳 バイブレーション（Android用、既存動作維持）
         if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+
+        // ✨ 視覚フラッシュ + トースト
+        display.classList.add('interval-flash');
+        showToast('インターバル終了 ⏱', '');
+
         addSetRow(machineId);
       }
       
@@ -1080,6 +1204,13 @@ function showModal(contentHtml) {
 }
 
 function closeModal() {
+  // インターバルタイマーが動いていれば停止 + Wake Lock解放
+  if (intervalTimerId) {
+    clearInterval(intervalTimerId);
+    intervalTimerId = null;
+  }
+  releaseWakeLock();
+
   const overlay = document.querySelector('.modal-overlay');
   if (overlay) overlay.remove();
 }
