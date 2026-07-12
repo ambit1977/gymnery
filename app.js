@@ -9,6 +9,7 @@ let alertedMinutes = new Set();
 let chartInstances = {};
 let intervalTimerId = null;
 let intervalTimerEndTime = 0;
+let intervalTimerMachineId = null;
 let wakeLockSentinel = null;
 let intervalBeepAudio = null;
 
@@ -182,11 +183,69 @@ function releaseWakeLock() {
   }
 }
 
-// 画面復帰時にWake Lockを再取得
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && intervalTimerId) {
-    requestWakeLock();
+// 画面復帰時およびPWAコールドスタート時の復元処理
+function clearLocalIntervalTimer() {
+  if (intervalTimerId) {
+    clearInterval(intervalTimerId);
+    intervalTimerId = null;
   }
+  intervalTimerEndTime = 0;
+  intervalTimerMachineId = null;
+  localStorage.removeItem('interval_timer_end_time');
+  localStorage.removeItem('interval_timer_machine_id');
+  localStorage.removeItem('interval_timer_triggered');
+  releaseWakeLock();
+  pushCancel();
+}
+
+async function restoreIntervalTimer() {
+  const endTimeStr = localStorage.getItem('interval_timer_end_time');
+  const machineId = localStorage.getItem('interval_timer_machine_id');
+  const triggered = localStorage.getItem('interval_timer_triggered');
+
+  if (!endTimeStr || !machineId) return;
+
+  const endTime = Number(endTimeStr);
+  const now = Date.now();
+
+  // すでにタイムアップ時間を過ぎているが、まだ追加処理が未実行の場合
+  if (now >= endTime && triggered === '0') {
+    localStorage.setItem('interval_timer_triggered', '1');
+    if (activeSessionId) {
+      await addSetRow(machineId);
+      showToast('バックグラウンド中にインターバルが終了したため、セットを追加しました ⏱', 'success');
+    }
+    clearLocalIntervalTimer();
+    
+    // 現在モーダルが開いていれば再レンダリングする
+    const modal = document.querySelector('.modal');
+    if (modal && typeof showWorkoutDetail === 'function') {
+      showWorkoutDetail(machineId);
+    }
+  } else if (now < endTime) {
+    // まだ時間がある場合はタイマー表示を再起動
+    const container = document.getElementById('interval-timer-container');
+    if (container && container.style.display === 'flex') {
+      intervalTimerEndTime = endTime;
+      startIntervalTimer(machineId, true); // trueを渡して初期予約をスキップ
+    }
+  }
+}
+
+// 画面復帰時やフォーカス時に復元処理をトリガー
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible') {
+    requestWakeLock();
+    if (intervalTimerId) {
+      // 稼働中の場合はWake Lockだけ再取得
+    } else {
+      await restoreIntervalTimer();
+    }
+  }
+});
+
+window.addEventListener('pageshow', async () => {
+  await restoreIntervalTimer();
 });
 
 // ========================================
@@ -283,6 +342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   navigateTo('home');
   registerSW();
   pushEnsureSubscription();
+  restoreIntervalTimer();
 });
 
 async function handleUrlParamsImport() {
@@ -1246,9 +1306,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
     }
   }
 
-  if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
-  releaseWakeLock();
-  pushCancel();
+  clearLocalIntervalTimer();
   closeModal();
 
   // スプレッドシート自動同期のトリガー
@@ -1264,7 +1322,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
   }
 }
 
-function startIntervalTimer(machineId) {
+function startIntervalTimer(machineId, skipSchedule = false) {
   const container = document.getElementById('interval-timer-container');
   const display = document.getElementById('interval-display');
   
@@ -1276,19 +1334,32 @@ function startIntervalTimer(machineId) {
 
   // 既存タイマーのクリーンアップ（連打対策）
   if (intervalTimerId) clearInterval(intervalTimerId);
-  releaseWakeLock();
-  pushCancel(); // 既存の予約をキャンセル
+
+  // 状態の初期化
+  intervalTimerMachineId = machineId;
+
+  if (!skipSchedule) {
+    // 新規開始時のみ状態を保存し予約を送信
+    releaseWakeLock();
+    pushCancel();
+
+    // デフォルト1分(60秒)で開始
+    intervalTimerEndTime = Date.now() + 60 * 1000;
+
+    localStorage.setItem('interval_timer_end_time', String(intervalTimerEndTime));
+    localStorage.setItem('interval_timer_machine_id', machineId);
+    localStorage.setItem('interval_timer_triggered', '0');
+
+    // VPSへPush予約送信（バッファ3秒を追加）
+    pushSchedule(intervalTimerEndTime + 3000);
+  }
 
   // Wake Lock 取得（スリープ防止）
   requestWakeLock();
-
-  // デフォルト1分(60秒)で開始
-  intervalTimerEndTime = Date.now() + 60 * 1000;
-  let hasTriggeredEnd = false;
-
-  // VPSへPush予約送信（バッファ3秒を追加）
-  pushSchedule(intervalTimerEndTime + 3000);
   
+  let hasTriggeredEnd = localStorage.getItem('interval_timer_triggered') === '1';
+  const audio = ensureIntervalBeepAudio();
+
   const updateDisplay = () => {
     const remainMs = intervalTimerEndTime - Date.now();
     
@@ -1296,6 +1367,7 @@ function startIntervalTimer(machineId) {
       // タイムアップ時（最初の一度だけアラートと行追加を実行）
       if (!hasTriggeredEnd) {
         hasTriggeredEnd = true;
+        localStorage.setItem('interval_timer_triggered', '1');
         pushCancel(); // フォアグラウンドでタイムアップしたので通知をキャンセル
 
         // 🔔 音声アラート（iOSサイレントスイッチでも鳴る）
@@ -1345,10 +1417,16 @@ function startIntervalTimer(machineId) {
 }
 
 function addOneMinuteToInterval() {
-  if (intervalTimerId) {
+  if (intervalTimerId && intervalTimerMachineId) {
     intervalTimerEndTime += 60 * 1000;
+    localStorage.setItem('interval_timer_end_time', String(intervalTimerEndTime));
+    // もしすでにタイムアップしていた場合はトリガーフラグをリセット
+    localStorage.setItem('interval_timer_triggered', '0');
     showToast('インターバルを1分追加しました ⏲️', 'success');
     pushSchedule(intervalTimerEndTime + 3000); // 予約時間を更新
+    
+    // 表示更新のためタイマーを再セット
+    startIntervalTimer(intervalTimerMachineId, true);
   }
 }
 
@@ -1369,13 +1447,7 @@ function showModal(contentHtml) {
 }
 
 function closeModal() {
-  // インターバルタイマーが動いていれば停止 + Wake Lock解放
-  if (intervalTimerId) {
-    clearInterval(intervalTimerId);
-    intervalTimerId = null;
-  }
-  releaseWakeLock();
-  pushCancel();
+  clearLocalIntervalTimer();
 
   const overlay = document.querySelector('.modal-overlay');
   if (overlay) overlay.remove();
@@ -2829,7 +2901,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v39)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v40)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
