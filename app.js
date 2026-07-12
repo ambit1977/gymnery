@@ -1420,17 +1420,33 @@ async function doDeleteExercise(exerciseId, sessionId) {
   showSessionDetail(sessionId);
 }
 
-function confirmDeleteSession(sessionId) {
+async function confirmDeleteSession(sessionId) {
   const isLinked = localStorage.getItem('gs_spreadsheet_id') && localStorage.getItem('gs_authed') === '1';
   let sheetsOptionHtml = '';
   
+  // ローカルの種目数をチェック（0件＝同期エラーの可能性が高い）
+  const localExCount = await db.exercises.where('sessionId').equals(sessionId).count();
+  
   if (isLinked) {
-    sheetsOptionHtml = `
-      <label class="flex items-center gap-xs mt-md mb-xs" style="cursor: pointer; user-select: none; font-size: 0.85rem;">
-        <input type="checkbox" id="delete-from-sheets-checkbox" checked style="width: 16px; height: 16px; accent-color: var(--danger);">
-        <span style="color: var(--text-secondary);">☁️ Googleスプレッドシートからも削除する</span>
-      </label>
-    `;
+    if (localExCount === 0) {
+      // 種目0件の場合、スプシ削除はデフォルトOFF＋警告表示
+      sheetsOptionHtml = `
+        <div class="card mt-md" style="padding:10px 14px; background:rgba(255,107,107,0.1); border:1px solid rgba(255,107,107,0.3); border-radius:var(--radius-sm);">
+          <p style="color:#ff6b6b; font-size:0.8rem; margin:0 0 6px;">⚠️ このセッションはローカルに種目データがありません（同期エラーの可能性）。スプレッドシート側には正しいデータが残っている場合があります。</p>
+          <label class="flex items-center gap-xs" style="cursor: pointer; user-select: none; font-size: 0.85rem;">
+            <input type="checkbox" id="delete-from-sheets-checkbox" style="width: 16px; height: 16px; accent-color: var(--danger);">
+            <span style="color: var(--text-secondary);">☁️ Googleスプレッドシートからも削除する（注意）</span>
+          </label>
+        </div>
+      `;
+    } else {
+      sheetsOptionHtml = `
+        <label class="flex items-center gap-xs mt-md mb-xs" style="cursor: pointer; user-select: none; font-size: 0.85rem;">
+          <input type="checkbox" id="delete-from-sheets-checkbox" checked style="width: 16px; height: 16px; accent-color: var(--danger);">
+          <span style="color: var(--text-secondary);">☁️ Googleスプレッドシートからも削除する</span>
+        </label>
+      `;
+    }
   }
 
   showModal(`
