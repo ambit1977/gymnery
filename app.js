@@ -657,7 +657,9 @@ async function renderHome(main) {
   // ========================================
   // 持ち物チェックリスト & 会員証初期化
   // ========================================
-  const todayStr = new Date().toISOString().split('T')[0];
+  const dCheck = new Date();
+  const padCheck = (n) => String(n).padStart(2, '0');
+  const todayStr = `${dCheck.getFullYear()}-${padCheck(dCheck.getMonth() + 1)}-${padCheck(dCheck.getDate())}`;
   const lastChecklistDate = localStorage.getItem('checklist_date');
   if (lastChecklistDate !== todayStr) {
     // 日付が変わったらチェック状態をすべてクリア
@@ -886,8 +888,7 @@ async function showMachineSelect() {
       if (!past || past.length === 0) continue; // 過去に一度もやったことがないものはここには出さない（部位別で選ぶ）
 
       const lastDate = new Date(past[0].createdAt);
-      const diffTime = now - lastDate;
-      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      const diffDays = getDaysDiff(now, lastDate);
 
       // 回復判定
       let isRecovered = false;
@@ -978,8 +979,7 @@ async function showMachineSelect() {
 
         if (past && past.length > 0) {
           const lastDate = new Date(past[0].createdAt);
-          const diffTime = now - lastDate;
-          const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+          const diffDays = getDaysDiff(now, lastDate);
           
           daysStr = diffDays === 0 ? '今日' : (diffDays === 1 ? '昨日' : `中 ${diffDays} 日`);
 
@@ -1946,8 +1946,7 @@ async function renderMachinesTab(container) {
   let listHtml = '';
   for (const item of machineHistory) {
     const m = item.machine;
-    const diffTime = now - item.lastDate;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = getDaysDiff(now, item.lastDate);
     
     let daysStr = '';
     let badgeColor = 'var(--text-secondary)';
@@ -2905,7 +2904,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v41)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v42)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;

@@ -225,6 +225,14 @@ function safeParseDate(str) {
   return new Date(year, month, day, hour, minute, second);
 }
 
+function formatLocalForSheets(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return isoStr;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 // タイムゾーンによる時間のズレ(9時間など)を無視して、年月日・時分の一致で同一判定を行うためのヘルパー
 function getLocalYMDHMString(date) {
   if (!date || isNaN(date.getTime())) return '';
@@ -365,8 +373,8 @@ async function gsheetSyncSessions(spreadsheetId) {
       remoteToAdd.push([
         localItem.id,
         localItem.facility || '',
-        localItem.startTime || '',
-        localItem.endTime || '',
+        formatLocalForSheets(localItem.startTime),
+        formatLocalForSheets(localItem.endTime),
         localItem.note || '',
       ]);
     } else {
@@ -379,7 +387,7 @@ async function gsheetSyncSessions(spreadsheetId) {
       if (localEnd && (localEndStr !== remoteEndStr || (localItem.note || '') !== (remoteItem.note || ''))) {
         remoteToUpdate.push({
           range: `sessions!D${remoteRowIdx}:E${remoteRowIdx}`,
-          values: [[localItem.endTime || '', localItem.note || '']]
+          values: [[formatLocalForSheets(localItem.endTime), localItem.note || '']]
         });
       }
     }
@@ -499,7 +507,7 @@ async function gsheetSyncExercises(spreadsheetId) {
         JSON.stringify(localItem.data),
         localItem.saveMode || '',
         localItem.note || '',
-        localItem.createdAt || '',
+        formatLocalForSheets(localItem.createdAt),
       ]);
     } else {
       // 存在する場合、ローカルのデータが異なれば更新をプッシュ
