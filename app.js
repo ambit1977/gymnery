@@ -1282,10 +1282,6 @@ function startIntervalTimer(machineId) {
   // Wake Lock 取得（スリープ防止）
   requestWakeLock();
 
-  // 音声アンロック（ユーザージェスチャのコンテキスト内で実行）
-  const audio = ensureIntervalBeepAudio();
-  audio.play().then(() => { audio.pause(); audio.currentTime = 0; }).catch(() => {});
-
   // デフォルト1分(60秒)で開始
   intervalTimerEndTime = Date.now() + 60 * 1000;
   let hasTriggeredEnd = false;
@@ -2833,7 +2829,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v38)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v39)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;

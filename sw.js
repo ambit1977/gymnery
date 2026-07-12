@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v38';
+const CACHE_NAME = 'training-app-v39';
 const ASSETS = [
   './',
   './index.html',
@@ -56,10 +56,25 @@ self.addEventListener('fetch', event => {
 });
 
 self.addEventListener('push', event => {
-  const data = event.data ? event.data.json() : {};
+  let title = 'インターバル終了 ⏱';
+  let body = 'セットを再開しましょう';
+
+  if (event.data) {
+    try {
+      const data = event.data.json();
+      if (data.title) title = data.title;
+      if (data.body) body = data.body;
+    } catch (e) {
+      try {
+        const text = event.data.text();
+        if (text) body = text;
+      } catch (err) {}
+    }
+  }
+
   event.waitUntil(
-    self.registration.showNotification(data.title || 'インターバル終了 ⏱', {
-      body: data.body || 'セットを再開しましょう',
+    self.registration.showNotification(title, {
+      body: body,
       icon: './icon-192.png',
       badge: './icon-192.png'
     })
