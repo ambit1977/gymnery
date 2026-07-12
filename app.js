@@ -13,6 +13,134 @@ let wakeLockSentinel = null;
 let intervalBeepAudio = null;
 
 // ========================================
+// Web Push 通知設定
+// ========================================
+const PUSH_SERVER_URL = 'https://ambit.go2020.tokyo/gymnery-push';
+const PUSH_AUTH_TOKEN = '110c51d7a0df23e3727416a0bc63273fc17d8df0a4cc2a06';
+const VAPID_PUBLIC_KEY = 'BMJVOWIjd6G60ktizFUf9hC843o-kO29XXhZPZoKvgt_4dBDamEu-wEK59wMc6iwsB32VwJ5SV-kpyK9HzuVL1Q';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+// Push予約をVPSへ送信
+function pushSchedule(fireAt) {
+  if (localStorage.getItem('push_enabled') !== '1') return;
+  fetch(`${PUSH_SERVER_URL}/schedule`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ fireAt })
+  }).catch(e => console.warn('Push schedule failed:', e));
+}
+
+// Push予約キャンセルをVPSへ送信
+function pushCancel() {
+  if (localStorage.getItem('push_enabled') !== '1') return;
+  fetch(`${PUSH_SERVER_URL}/cancel`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`
+    }
+  }).catch(e => console.warn('Push cancel failed:', e));
+}
+
+// 通知の有効化処理
+async function pushSubscribe() {
+  const btn = document.getElementById('push-enable-btn');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('このブラウザ/環境はバックグラウンド通知に対応していません。ホーム画面に追加(PWA化)してからお試しください。');
+    return;
+  }
+
+  try {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '登録中...';
+    }
+
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') {
+      alert('通知許可が拒否されました。設定アプリから許可を有効にしてください。');
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '通知を有効にする';
+      }
+      return;
+    }
+
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+
+    const res = await fetch(`${PUSH_SERVER_URL}/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ subscription: sub })
+    });
+
+    if (!res.ok) throw new Error('Server subscription registration failed');
+
+    localStorage.setItem('push_enabled', '1');
+    showToast('バックグラウンド通知を有効にしました 🔔', 'success');
+    renderSettings(document.getElementById('main-content'));
+  } catch (err) {
+    console.error('Push subscription failed:', err);
+    alert('通知登録に失敗しました: ' + err.message);
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '通知を有効にする';
+    }
+  }
+}
+
+// アプリ起動時に購読確認
+async function pushEnsureSubscription() {
+  if (localStorage.getItem('push_enabled') !== '1') return;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      console.log('Push subscription lost. Resubscribing...');
+      const newSub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+      });
+      await fetch(`${PUSH_SERVER_URL}/subscribe`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ subscription: newSub })
+      });
+    }
+  } catch (e) {
+    console.warn('Subscription ensure failed:', e);
+  }
+}
+let wakeLockSentinel = null;
+let intervalBeepAudio = null;
+
+// ========================================
 // Screen Wake Lock (インターバル中のスリープ防止)
 // ========================================
 async function requestWakeLock() {
@@ -135,6 +263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   navigateTo('home');
   registerSW();
+  pushEnsureSubscription();
 });
 
 async function handleUrlParamsImport() {
@@ -1100,6 +1229,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
 
   if (intervalTimerId) { clearInterval(intervalTimerId); intervalTimerId = null; }
   releaseWakeLock();
+  pushCancel();
   closeModal();
 
   // スプレッドシート自動同期のトリガー
@@ -1128,6 +1258,7 @@ function startIntervalTimer(machineId) {
   // 既存タイマーのクリーンアップ（連打対策）
   if (intervalTimerId) clearInterval(intervalTimerId);
   releaseWakeLock();
+  pushCancel(); // 既存の予約をキャンセル
 
   // Wake Lock 取得（スリープ防止）
   requestWakeLock();
@@ -1139,6 +1270,9 @@ function startIntervalTimer(machineId) {
   // デフォルト1分(60秒)で開始
   intervalTimerEndTime = Date.now() + 60 * 1000;
   let hasTriggeredEnd = false;
+
+  // VPSへPush予約送信（バッファ3秒を追加）
+  pushSchedule(intervalTimerEndTime + 3000);
   
   const updateDisplay = () => {
     const remainMs = intervalTimerEndTime - Date.now();
@@ -1147,6 +1281,7 @@ function startIntervalTimer(machineId) {
       // タイムアップ時（最初の一度だけアラートと行追加を実行）
       if (!hasTriggeredEnd) {
         hasTriggeredEnd = true;
+        pushCancel(); // フォアグラウンドでタイムアップしたので通知をキャンセル
 
         // 🔔 音声アラート（iOSサイレントスイッチでも鳴る）
         audio.currentTime = 0;
@@ -1198,6 +1333,7 @@ function addOneMinuteToInterval() {
   if (intervalTimerId) {
     intervalTimerEndTime += 60 * 1000;
     showToast('インターバルを1分追加しました ⏲️', 'success');
+    pushSchedule(intervalTimerEndTime + 3000); // 予約時間を更新
   }
 }
 
@@ -1224,6 +1360,7 @@ function closeModal() {
     intervalTimerId = null;
   }
   releaseWakeLock();
+  pushCancel();
 
   const overlay = document.querySelector('.modal-overlay');
   if (overlay) overlay.remove();
@@ -2659,6 +2796,15 @@ function renderSettings(main) {
           <input type="file" id="import-csv-input" multiple accept=".csv" style="display:none" onchange="handleImportCSV(event)">
           <button class="btn btn-secondary btn-sm" onclick="document.getElementById('import-csv-input').click()" style="flex:1">インポート</button>
         </div>
+      </div>
+
+      <div class="card mb-md">
+        <div class="text-sm font-bold mb-sm">🔔 バックグラウンド通知</div>
+        <p class="text-xs text-muted mb-md">インターバル終了時、アプリがバックグラウンドでもロック画面に通知します。</p>
+        ${localStorage.getItem('push_enabled') === '1'
+          ? `<button class="btn btn-secondary btn-sm btn-block" disabled style="background:#2b3a4a; color:#8ab4f8; border-color:#2b3a4a;">✅ 通知は有効です</button>`
+          : `<button class="btn btn-primary btn-sm btn-block" onclick="pushSubscribe()" id="push-enable-btn">通知を有効にする</button>`
+        }
       </div>
 
       <div class="card mb-md">

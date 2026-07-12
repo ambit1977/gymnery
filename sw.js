@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v35';
+const CACHE_NAME = 'training-app-v36';
 const ASSETS = [
   './',
   './index.html',
@@ -53,4 +53,25 @@ self.addEventListener('fetch', event => {
       }).catch(() => caches.match(event.request))
     );
   }
+});
+
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {};
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'インターバル終了 ⏱', {
+      body: data.body || 'セットを再開しましょう',
+      icon: './icon-192.png',
+      badge: './icon-192.png'
+    })
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then(list => {
+      if (list.length > 0) return list[0].focus();
+      return clients.openWindow('./index.html');
+    })
+  );
 });
