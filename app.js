@@ -1366,6 +1366,10 @@ function startIntervalTimer(machineId, skipSchedule = false) {
     if (remainMs <= 0) {
       // タイムアップ時（最初の一度だけアラートと行追加を実行）
       if (!hasTriggeredEnd) {
+        // アプリがバックグラウンドにいる場合は、フロントエンドのタイムアップ処理を行わず、
+        // サーバーからの Web Push 通知と、復帰時の復元処理（restoreIntervalTimer）に委ねる
+        if (document.hidden) return;
+
         hasTriggeredEnd = true;
         localStorage.setItem('interval_timer_triggered', '1');
         pushCancel(); // フォアグラウンドでタイムアップしたので通知をキャンセル
@@ -2901,7 +2905,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v40)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v41)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
