@@ -34,7 +34,11 @@ function urlBase64ToUint8Array(base64String) {
 
 // Push予約をVPSへ送信
 function pushSchedule(fireAt) {
-  if (localStorage.getItem('push_enabled') !== '1') return;
+  if (localStorage.getItem('push_enabled') !== '1') {
+    console.log('Push is disabled');
+    return;
+  }
+  showToast('通知予約送信中...☁️', '');
   fetch(`${PUSH_SERVER_URL}/schedule`, {
     method: 'POST',
     headers: {
@@ -42,7 +46,16 @@ function pushSchedule(fireAt) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ fireAt })
-  }).catch(e => console.warn('Push schedule failed:', e));
+  }).then(res => {
+    if (!res.ok) {
+      showToast(`通知予約エラー (${res.status}) ❌`, 'danger');
+    } else {
+      showToast('通知予約完了 ✅', 'success');
+    }
+  }).catch(e => {
+    console.warn('Push schedule failed:', e);
+    showToast(`通知予約失敗: ${e.message} ❌`, 'danger');
+  });
 }
 
 // Push予約キャンセルをVPSへ送信
@@ -52,6 +65,10 @@ function pushCancel() {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`
+    }
+  }).then(res => {
+    if (res.ok) {
+      console.log('Push cancel completed');
     }
   }).catch(e => console.warn('Push cancel failed:', e));
 }
@@ -86,6 +103,7 @@ async function pushSubscribe() {
       applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
     });
 
+    showToast('サーバーへ購読情報を送信中...⏳', '');
     const res = await fetch(`${PUSH_SERVER_URL}/subscribe`, {
       method: 'POST',
       headers: {
@@ -95,7 +113,7 @@ async function pushSubscribe() {
       body: JSON.stringify({ subscription: sub })
     });
 
-    if (!res.ok) throw new Error('Server subscription registration failed');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
     localStorage.setItem('push_enabled', '1');
     showToast('バックグラウンド通知を有効にしました 🔔', 'success');
@@ -124,7 +142,7 @@ async function pushEnsureSubscription() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
-      await fetch(`${PUSH_SERVER_URL}/subscribe`, {
+      const res = await fetch(`${PUSH_SERVER_URL}/subscribe`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
@@ -132,6 +150,9 @@ async function pushEnsureSubscription() {
         },
         body: JSON.stringify({ subscription: newSub })
       });
+      if (res.ok) {
+        showToast('バックグラウンド通知の購読を自動復旧しました 🔔', 'success');
+      }
     }
   } catch (e) {
     console.warn('Subscription ensure failed:', e);
@@ -2812,7 +2833,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v37)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v38)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
