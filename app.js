@@ -160,6 +160,17 @@ async function pushEnsureSubscription() {
   }
 }
 
+function getDaysDiff(date1, date2) {
+  if (!date1 || !date2) return 0;
+  const dObj1 = date1 instanceof Date ? date1 : new Date(date1);
+  const dObj2 = date2 instanceof Date ? date2 : new Date(date2);
+  if (isNaN(dObj1.getTime()) || isNaN(dObj2.getTime())) return 0;
+  
+  const d1 = new Date(dObj1.getFullYear(), dObj1.getMonth(), dObj1.getDate());
+  const d2 = new Date(dObj2.getFullYear(), dObj2.getMonth(), dObj2.getDate());
+  return Math.round((d1.getTime() - d2.getTime()) / (1000 * 60 * 60 * 24));
+}
+
 // ========================================
 // Screen Wake Lock (インターバル中のスリープ防止)
 // ========================================
@@ -2904,7 +2915,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v43)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v44)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
