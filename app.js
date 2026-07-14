@@ -2904,7 +2904,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v42)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v43)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;

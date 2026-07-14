@@ -377,6 +377,8 @@ async function gsheetSyncSessions(spreadsheetId) {
         formatLocalForSheets(localItem.endTime),
         localItem.note || '',
       ]);
+      // 種目同期がセッションIDを解決できるようにマッピングを登録
+      remoteSessionIdToLocalIdMap.set(String(localItem.id), localItem.id);
     } else {
       // 存在する場合、ローカル側のendTimeやnoteがリモートと異なれば常にアップロード（ユーザー編集を反映）
       const localEnd = safeParseDate(localItem.endTime);
