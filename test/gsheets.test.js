@@ -13,8 +13,10 @@ beforeAll(() => {
       exercises: { toArray: () => Promise.resolve([]) }
     },
     console,
-    Date
+    Date,
+    window: {}
   };
+  sandbox.window = sandbox;
   
   // gsheets.jsを読み込んで実行
   const code = fs.readFileSync(path.resolve(__dirname, '../gsheets.js'), 'utf8');
@@ -29,15 +31,15 @@ describe('formatLocalForSheets (gsheets.js)', () => {
     const pad = (n) => String(n).padStart(2, '0');
     const systemLocalStr = `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     
-    expect(sandbox.formatLocalForSheets(isoStr)).toBe(systemLocalStr);
+    expect(sandbox.GymneryGSheets.formatLocalForSheets(isoStr)).toBe(systemLocalStr);
   });
 
   it('should return empty string for empty input', () => {
-    expect(sandbox.formatLocalForSheets('')).toBe('');
-    expect(sandbox.formatLocalForSheets(null)).toBe('');
+    expect(sandbox.GymneryGSheets.formatLocalForSheets('')).toBe('');
+    expect(sandbox.GymneryGSheets.formatLocalForSheets(null)).toBe('');
   });
 
   it('should return original string if input is not a parseable date', () => {
-    expect(sandbox.formatLocalForSheets('not-a-date')).toBe('not-a-date');
+    expect(sandbox.GymneryGSheets.formatLocalForSheets('not-a-date')).toBe('not-a-date');
   });
 });

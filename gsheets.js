@@ -1,3 +1,5 @@
+window.GymneryGSheets = (function() {
+
 // ========================================
 // gsheets.js - Google Sheets 連携
 // ========================================
@@ -986,3 +988,33 @@ async function gsheetsCleanRemoteDuplicates() {
     showToast(`クリーンアップエラー: ${e.message}`, 'danger');
   }
 }
+
+  // 公開APIのエクスポート
+  return {
+    isAuthorized: gsheetsIsAuthorized,
+    getClientId: gsheetsGetClientId,
+    signIn: gsheetsSignIn,
+    signOut: gsheetsSignOut,
+    ensureToken: gsheetsEnsureToken,
+    syncAll: gsheetsSyncAll,
+    settingsHtml: gsheetsSettingsHtml,
+    signInAndUpdate: gsheetsSignInAndUpdate,
+    syncAllUI: gsheetsSyncAllUI,
+    maybeAutoSync: gsheetsMaybeAutoSync,
+    deleteSessionAndExercises: gsheetsDeleteSessionAndExercises,
+    showRawDataLog: gsheetsShowRawDataLog,
+    cleanRemoteDuplicates: gsheetsCleanRemoteDuplicates,
+    formatLocalForSheets: formatLocalForSheets // テスト用露出
+  };
+})();
+
+// 後方互換性およびHTML上のonclick属性からの直接呼び出し用のグローバルエイリアス
+window.gsheetsSignIn = window.GymneryGSheets.signIn;
+window.gsheetsSignOut = window.GymneryGSheets.signOut;
+window.gsheetsSignInAndUpdate = window.GymneryGSheets.signInAndUpdate;
+window.gsheetsSyncAllUI = window.GymneryGSheets.syncAllUI;
+window.gsheetsMaybeAutoSync = window.GymneryGSheets.maybeAutoSync;
+window.gsheetsDeleteSessionAndExercises = window.GymneryGSheets.deleteSessionAndExercises;
+window.gsheetsShowRawDataLog = window.GymneryGSheets.showRawDataLog;
+window.gsheetsCleanRemoteDuplicates = window.GymneryGSheets.cleanRemoteDuplicates;
+window.gsheetsSettingsHtml = window.GymneryGSheets.settingsHtml;

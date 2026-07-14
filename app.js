@@ -793,8 +793,8 @@ async function doEndSession() {
   showToast('お疲れさまでした！🎉', 'success');
   showSessionDetail(sid);
   // Google Sheets 自動同期（設定がONの場合のみ）
-  if (typeof gsheetsMaybeAutoSync === 'function') {
-    gsheetsMaybeAutoSync().catch(e => console.warn('Sheets auto-sync:', e.message));
+  if (window.GymneryGSheets && window.GymneryGSheets.maybeAutoSync) {
+    window.GymneryGSheets.maybeAutoSync().catch(e => console.warn('Sheets auto-sync:', e.message));
   }
 }
 
@@ -1320,9 +1320,8 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
   clearLocalIntervalTimer();
   closeModal();
 
-  // スプレッドシート自動同期のトリガー
-  if (typeof gsheetsMaybeAutoSync === 'function') {
-    gsheetsMaybeAutoSync();
+  if (window.GymneryGSheets && window.GymneryGSheets.maybeAutoSync) {
+    window.GymneryGSheets.maybeAutoSync();
   }
 
   if (editExerciseId || targetSessionId) {
@@ -1651,9 +1650,8 @@ async function doDeleteExercise(exerciseId, sessionId) {
   closeModal();
   showToast('記録を削除しました', 'success');
 
-  // スプレッドシート自動同期のトリガー
-  if (typeof gsheetsMaybeAutoSync === 'function') {
-    gsheetsMaybeAutoSync();
+  if (window.GymneryGSheets && window.GymneryGSheets.maybeAutoSync) {
+    window.GymneryGSheets.maybeAutoSync();
   }
 
   showSessionDetail(sessionId);
@@ -1712,9 +1710,8 @@ async function doDeleteSession(sessionId) {
   showToast('セッションを削除しました', 'success');
   navigateTo('history');
 
-  // Google Sheetsの削除連携を実行
-  if (deleteFromSheets && typeof gsheetsDeleteSessionAndExercises === 'function') {
-    gsheetsDeleteSessionAndExercises(sessionId).catch(e => console.error('Delete sync failed:', e));
+  if (deleteFromSheets && window.GymneryGSheets && window.GymneryGSheets.deleteSessionAndExercises) {
+    window.GymneryGSheets.deleteSessionAndExercises(sessionId).catch(e => console.error('Delete sync failed:', e));
   }
 }
 
@@ -2915,16 +2912,15 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v44)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v45)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
 
-  // Google Sheets カードをデータ入出力カードの直前に差し込む
-  if (typeof gsheetsSettingsHtml === 'function') {
+  if (window.GymneryGSheets && window.GymneryGSheets.settingsHtml) {
     const dataCard = main.querySelector('.page .card:nth-child(4)'); // 元の4に戻す
     const sheetsDiv = document.createElement('div');
-    sheetsDiv.innerHTML = gsheetsSettingsHtml();
+    sheetsDiv.innerHTML = window.GymneryGSheets.settingsHtml();
     if (dataCard) {
       dataCard.parentNode.insertBefore(sheetsDiv.firstElementChild, dataCard);
     }
