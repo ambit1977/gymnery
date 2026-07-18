@@ -34,44 +34,48 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 // Push予約をVPSへ送信
-function pushSchedule(fireAt) {
+function pushSchedule(fireAt, type = 'interval') {
   if (localStorage.getItem('push_enabled') !== '1') {
     console.log('Push is disabled');
     return;
   }
-  showToast('通知予約送信中...☁️', '');
+  const showToastFlag = (type === 'interval');
+  if (showToastFlag) showToast('通知予約送信中...☁️', '');
+  
   fetch(`${PUSH_SERVER_URL}/schedule`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({ fireAt })
+    body: JSON.stringify({ fireAt, type })
   }).then(res => {
     if (!res.ok) {
-      showToast(`通知予約エラー (${res.status}) ❌`, 'danger');
+      if (showToastFlag) showToast(`通知予約エラー (${res.status}) ❌`, 'danger');
     } else {
-      showToast('通知予約完了 ✅', 'success');
+      if (showToastFlag) showToast('通知予約完了 ✅', 'success');
     }
   }).catch(e => {
     console.warn('Push schedule failed:', e);
-    showToast(`通知予約失敗: ${e.message} ❌`, 'danger');
+    if (showToastFlag) showToast(`通知予約失敗: ${e.message} ❌`, 'danger');
   });
 }
 
 // Push予約キャンセルをVPSへ送信
-function pushCancel() {
+function pushCancel(type = 'interval') {
   if (localStorage.getItem('push_enabled') !== '1') return;
   fetch(`${PUSH_SERVER_URL}/cancel`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`
-    }
+      'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ type })
   }).then(res => {
     if (res.ok) {
-      console.log('Push cancel completed');
+      console.log(`Push cancel completed for type=${type}`);
     }
-  }).catch(e => console.warn('Push cancel failed:', e));
+  }).catch(e => console.warn(`Push cancel failed for type=${type}:`, e));
 }
 
 // 通知の有効化処理
@@ -206,7 +210,7 @@ function clearLocalIntervalTimer() {
   localStorage.removeItem('interval_timer_machine_id');
   localStorage.removeItem('interval_timer_triggered');
   releaseWakeLock();
-  pushCancel();
+  pushCancel('interval');
 }
 
 async function restoreIntervalTimer() {
@@ -444,12 +448,19 @@ function showToast(msg, type = '') {
 // ========================================
 function clearTimer() {
   if (timerInterval) { clearInterval(timerInterval); timerInterval = null; }
+  pushCancel('session_5min');
+  pushCancel('session_end');
 }
 
 function startTimer(startTime, timerContainer) {
   clearTimer();
   alertedMinutes.clear();
   const SESSION_DURATION = 60 * 60 * 1000; // 1時間
+
+  // サーバーへプッシュ通知スケジュールを送信（5分前警告＆終了時）
+  const startTimeMs = new Date(startTime).getTime();
+  pushSchedule(startTimeMs + 55 * 60 * 1000, 'session_5min');
+  pushSchedule(startTimeMs + 60 * 60 * 1000, 'session_end');
 
   const notifyUser = (remainMin) => {
     if (navigator.vibrate) navigator.vibrate([200, 100, 200, 100, 200]);
@@ -1077,6 +1088,9 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
   let lastData = null;
   let lastNote = '';
   let resolvedSessionId = targetSessionId;
+  if (!editExerciseId && !targetSessionId && activeSessionId) {
+    resolvedSessionId = activeSessionId;
+  }
 
   if (editExerciseId) {
     const db = new Dexie('TrainingRoomApp');
@@ -1351,7 +1365,7 @@ function startIntervalTimer(machineId, skipSchedule = false) {
   if (!skipSchedule) {
     // 新規開始時のみ状態を保存し予約を送信
     releaseWakeLock();
-    pushCancel();
+    pushCancel('interval');
 
     // デフォルト1分(60秒)で開始
     intervalTimerEndTime = Date.now() + 60 * 1000;
@@ -1361,7 +1375,7 @@ function startIntervalTimer(machineId, skipSchedule = false) {
     localStorage.setItem('interval_timer_triggered', '0');
 
     // VPSへPush予約送信（バッファ3秒を追加）
-    pushSchedule(intervalTimerEndTime + 3000);
+    pushSchedule(intervalTimerEndTime + 3000, 'interval');
   }
 
   // Wake Lock 取得（スリープ防止）
@@ -1382,7 +1396,7 @@ function startIntervalTimer(machineId, skipSchedule = false) {
 
         hasTriggeredEnd = true;
         localStorage.setItem('interval_timer_triggered', '1');
-        pushCancel(); // フォアグラウンドでタイムアップしたので通知をキャンセル
+        pushCancel('interval'); // フォアグラウンドでタイムアップしたので通知をキャンセル
 
         // 🔔 音声アラート（iOSサイレントスイッチでも鳴る）
         audio.currentTime = 0;
@@ -1437,7 +1451,8 @@ function addOneMinuteToInterval() {
     // もしすでにタイムアップしていた場合はトリガーフラグをリセット
     localStorage.setItem('interval_timer_triggered', '0');
     showToast('インターバルを1分追加しました ⏲️', 'success');
-    pushSchedule(intervalTimerEndTime + 3000); // 予約時間を更新
+    pushCancel('interval');
+    pushSchedule(intervalTimerEndTime + 3000, 'interval'); // 予約時間を更新
     
     // 表示更新のためタイマーを再セット
     startIntervalTimer(intervalTimerMachineId, true);
@@ -2912,7 +2927,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v45)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v46)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;

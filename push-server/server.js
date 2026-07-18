@@ -43,15 +43,22 @@ function saveSubscriptions() {
 
 loadSubscriptions();
 
-// タイマー管理
-let activeTimer = null;
-let scheduledTime = null;
+// タイマー管理 (キー: subscription.endpoint + '_' + type, 値: { timer, fireAt })
+const activeTimers = new Map();
 
-function sendPushToAll() {
-  const payload = JSON.stringify({
-    title: 'インターバル終了 ⏱',
-    body: 'セットを再開しましょう'
-  });
+function sendPushToAll(type = 'interval') {
+  let title = 'インターバル終了 ⏱';
+  let body = 'セットを再開しましょう';
+
+  if (type === 'session_5min') {
+    title = '残り時間わずか ⚠️';
+    body = 'セッション終了5分前です';
+  } else if (type === 'session_end') {
+    title = '制限時間終了 🚨';
+    body = '1時間が経過しました。セッションを終了してください';
+  }
+
+  const payload = JSON.stringify({ title, body });
 
   const promises = subscriptions.map(sub => {
     return webpush.sendNotification(sub, payload).catch(err => {
@@ -70,6 +77,17 @@ function sendPushToAll() {
     if (expiredEndpoints.length > 0) {
       subscriptions = subscriptions.filter(sub => !expiredEndpoints.includes(sub.endpoint));
       saveSubscriptions();
+
+      // 切れたサブスクリプションに関連するタイマーをクリーンアップ
+      for (const endpoint of expiredEndpoints) {
+        for (const key of activeTimers.keys()) {
+          if (key.startsWith(endpoint)) {
+            const item = activeTimers.get(key);
+            if (item && item.timer) clearTimeout(item.timer);
+            activeTimers.delete(key);
+          }
+        }
+      }
     }
   });
 }
@@ -131,7 +149,8 @@ const server = http.createServer((req, res) => {
 
     // schedule
     if (req.method === 'POST' && req.url === '/schedule') {
-      const { fireAt } = json;
+      const { fireAt, type } = json;
+      const t = type || 'interval';
       if (!fireAt) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Missing fireAt' }));
@@ -139,22 +158,50 @@ const server = http.createServer((req, res) => {
       }
 
       const delay = fireAt - Date.now();
-      console.log(`Scheduling push in ${delay}ms (at ${new Date(fireAt).toLocaleString()})`);
+      console.log(`Scheduling push type=${t} in ${delay}ms (at ${new Date(fireAt).toLocaleString()})`);
 
-      if (activeTimer) clearTimeout(activeTimer);
+      // 登録されている全購読に対してタイマーをセット
+      subscriptions.forEach(sub => {
+        const key = `${sub.endpoint}_${t}`;
+        
+        // 既存の同種別タイマーがあればキャンセル
+        const existing = activeTimers.get(key);
+        if (existing && existing.timer) {
+          clearTimeout(existing.timer);
+        }
 
-      if (delay > 0) {
-        scheduledTime = fireAt;
-        activeTimer = setTimeout(() => {
-          console.log('Timer fired. Sending push notifications...');
-          sendPushToAll();
-          activeTimer = null;
-          scheduledTime = null;
-        }, delay);
-      } else {
-        // 即時送信
-        sendPushToAll();
-      }
+        if (delay > 0) {
+          const timer = setTimeout(() => {
+            console.log(`Timer fired for type=${t}. Sending push notification...`);
+            const payload = JSON.stringify({
+              title: t === 'session_5min' ? '残り時間わずか ⚠️' : (t === 'session_end' ? '制限時間終了 🚨' : 'インターバル終了 ⏱'),
+              body: t === 'session_5min' ? 'セッション終了5分前です' : (t === 'session_end' ? '1時間が経過しました。セッションを終了してください' : 'セットを再開しましょう')
+            });
+            webpush.sendNotification(sub, payload).catch(err => {
+              if (err.statusCode === 404 || err.statusCode === 410) {
+                console.log('Subscription expired during fire:', sub.endpoint);
+                subscriptions = subscriptions.filter(s => s.endpoint !== sub.endpoint);
+                saveSubscriptions();
+              }
+            });
+            activeTimers.delete(key);
+          }, delay);
+
+          activeTimers.set(key, { timer, fireAt });
+        } else {
+          // 即時送信
+          const payload = JSON.stringify({
+            title: t === 'session_5min' ? '残り時間わずか ⚠️' : (t === 'session_end' ? '制限時間終了 🚨' : 'インターバル終了 ⏱'),
+            body: t === 'session_5min' ? 'セッション終了5分前です' : (t === 'session_end' ? '1時間が経過しました。セッションを終了してください' : 'セットを再開しましょう')
+          });
+          webpush.sendNotification(sub, payload).catch(err => {
+            if (err.statusCode === 404 || err.statusCode === 410) {
+              subscriptions = subscriptions.filter(s => s.endpoint !== sub.endpoint);
+              saveSubscriptions();
+            }
+          });
+        }
+      });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
@@ -163,12 +210,19 @@ const server = http.createServer((req, res) => {
 
     // cancel
     if (req.method === 'POST' && req.url === '/cancel') {
-      if (activeTimer) {
-        clearTimeout(activeTimer);
-        activeTimer = null;
-        scheduledTime = null;
-        console.log('Timer cancelled');
-      }
+      const { type } = json;
+      const t = type || 'interval';
+
+      subscriptions.forEach(sub => {
+        const key = `${sub.endpoint}_${t}`;
+        const existing = activeTimers.get(key);
+        if (existing) {
+          if (existing.timer) clearTimeout(existing.timer);
+          activeTimers.delete(key);
+          console.log(`Timer cancelled for key=${key}`);
+        }
+      });
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
       return;
