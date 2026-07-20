@@ -1519,13 +1519,14 @@ textarea.input {
 /* --- Sticky Calendar & Accordion / Picker Style --- */
 .sticky-calendar-wrapper {
   position: sticky;
-  top: 0; /* わずかな引っかかりを作って影を出す */
+  top: 0;
   z-index: 100;
   background: var(--bg-primary);
+  padding-top: env(safe-area-inset-top, 0px); /* ノッチの裏まで背景を伸ばし中身を下げる */
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color);
   transition: box-shadow 0.2s ease;
-  margin-top: -8px; /* 親のpadding相殺用 */
+  margin-top: calc(-8px - env(safe-area-inset-top, 0px)); /* 親のpaddingとセーフエリアを相殺 */
 }
 .sticky-calendar-wrapper.is-stuck {
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
