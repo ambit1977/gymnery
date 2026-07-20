@@ -1969,14 +1969,24 @@ async function renderTrainerTab(container) {
       </div>`;
   }
 
+  const userGoal = localStorage.getItem('gemini_trainer_goal') || '';
+
   container.innerHTML = `
     <div class="card animate-fade-in" style="padding: 20px;">
-      <div class="flex items-center gap-sm mb-sm">
+      <div class="flex items-center gap-sm mb-md">
         <span style="font-size: 1.8rem;">💪</span>
         <div style="flex:1;">
           <div class="text-sm font-bold">AI専属トレーナーに相談</div>
-          <p class="text-xs text-muted" style="font-size: 0.65rem;">直近10セッション（最長過去1ヶ月分）の履歴を基にアドバイスを生成します</p>
+          <p class="text-xs text-muted" style="font-size: 0.65rem;">過去30日間の全トレーニング履歴を基にアドバイスを生成します</p>
         </div>
+      </div>
+      
+      <div class="input-group mb-md">
+        <label class="input-label" style="font-size: 0.7rem; font-weight:bold;">🎯 あなたの目標・トレーナーへの要望（任意）</label>
+        <textarea class="input text-xs" id="trainer-user-goal" 
+          placeholder="例：3ヶ月で体脂肪率を3%落としたい / 胸と背中を大きくしたい / 運動不足や肩こりを解消したい" 
+          onchange="localStorage.setItem('gemini_trainer_goal', this.value)"
+          style="height: 60px; resize: none; font-size: 0.75rem; border-color: var(--border-color);">${userGoal}</textarea>
       </div>
       
       <div id="trainer-actions">
@@ -2039,16 +2049,15 @@ async function generateTrainerAdvice() {
     const allSessions = await getAllSessions();
     const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     
-    const targetSessions = allSessions
-      .filter(s => {
-        const time = new Date(s.startTime).getTime();
-        if (s.id === activeSessionId && !s.endTime) return false;
-        return time >= oneMonthAgo;
-      })
-      .slice(0, 10);
+    // 過去30日間の全セッションを取得（件数制限なし）
+    const targetSessions = allSessions.filter(s => {
+      const time = new Date(s.startTime).getTime();
+      if (s.id === activeSessionId && !s.endTime) return false;
+      return time >= oneMonthAgo;
+    });
 
     if (targetSessions.length === 0) {
-      throw new Error('過去1ヶ月以内に完了したトレーニング履歴が見つかりません。まずはトレーニングを記録してください。');
+      throw new Error('過去30日以内に完了したトレーニング履歴が見つかりません。まずはトレーニングを記録してください。');
     }
 
     loadingStatus.textContent = '詳細データを解析中... 🔍';
@@ -2071,7 +2080,12 @@ async function generateTrainerAdvice() {
           }).join('\n');
           sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}:\n${setsStr}\n`;
         } else if (machine?.type === 'cardio') {
-          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}: ${ex.data.duration || 0}分, ${ex.data.distance || 0}km, レベル${ex.data.level || 0}\n`;
+          // マシンごとのフィールド構成に合わせて動的にテキスト化
+          const fieldsText = machine.fields ? machine.fields.map(f => {
+            const val = ex.data[f.key] !== undefined ? ex.data[f.key] : '0';
+            return `${f.label}: ${val}${f.unit || ''}`;
+          }).join(', ') : '';
+          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}: ${fieldsText}\n`;
         }
         if (ex.note) sessionsPromptText += `  メモ: ${ex.note}\n`;
       }
@@ -2088,26 +2102,34 @@ async function generateTrainerAdvice() {
 
     loadingStatus.textContent = 'トレーナーが評価を作成中... 🧠';
 
-    const systemPrompt = `あなたは優秀なフィットネスの専属パーソナルトレーナーです。ユーザーのトレーニング履歴と最新の体組成データを分析し、専門的でありながら親しみやすく、モチベーションを高める評価と具体的なアドバイスを日本語で提供してください。`;
+    const userGoal = localStorage.getItem('gemini_trainer_goal') || '健康維持・ボディメイク（未設定）';
+
+    const systemPrompt = `あなたは優秀なフィットネスの専属パーソナルトレーナーです。ユーザーのトレーニング履歴と最新の体組成データを分析し、専門的でありながら親しみやすく、モチベーションを高める評価と具体的なアドバイスを日本語で提供してください。
+回答時の重要なルール：
+1. 「〇〇さん」や「[ユーザー名]」などのダミーの三人称やプレースホルダー表現は、回答内で絶対に記述しないでください。
+2. ユーザーに対しては、名前を呼ばずに二人称（あなた）または親しみやすい専属トレーナーとしての語り口調（例：「お疲れ様です！今日のトレーニングは〜」）で直接語りかけるように回答を作成してください。`;
     
     const userPrompt = `以下のデータを分析し、アドバイスを作成してください。
+
+【ユーザーの目的・目標・要望】
+${userGoal}
 
 【最新の体組成データ】
 ${bodyCompPromptText}
 
-【直近のトレーニング履歴（最大10回分、過去30日間）】
+【過去30日間の全トレーニング履歴 (全${targetSessions.length}セッション)】
 ${sessionsPromptText}
 
 【回答フォーマット】
 以下の見出し（###）を使って、Markdown形式で出力してください。見出し以外の行には余分なマークダウン記号（*など）を使わずシンプルに説明してください。
 ### 📊 直近のトレーニング総評
-全体的な運動頻度、実施部位のバランス（上半身・下半身・体幹など）、トレーニング構成についての総評。
+提供された期間全体の合計セッション数・頻度（週何回ペースか）、実施部位のバランス（上半身・下半身・体幹など）、トレーニング構成についての総評。
 
 ### 💪 良かったポイント
 実施した内容の中で、特に優れている点や継続できている良い点（例：セット数の維持、徐々に重量が上がっている、定期的に通えている等）。
 
 ### 🎯 今後のアドバイス・改善プラン
-次回のメニュー構成や強度の上げ方（プログレッシブ・オーバーロードの意識など）、食事や有酸素運動の取り入れ方など、具体的で実践しやすい目標。
+ユーザーの目的・目標を踏まえ、次回のメニュー構成や強度の上げ方（プログレッシブ・オーバーロードの意識など）、食事や有酸素運動の取り入れ方など、具体的で実践しやすい目標。
 
 ### 💬 トレーナーからのメッセージ
 ユーザーのモチベーションを引き出す力強いひと言。`;
@@ -3172,7 +3194,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v50)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v51)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3415,7 +3437,7 @@ async function doClearAll() {
 async function registerSW() {
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js?v=50');
+      const reg = await navigator.serviceWorker.register('sw.js?v=51');
       if (reg) {
         reg.update();
       }
