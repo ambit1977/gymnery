@@ -3172,8 +3172,11 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v48)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v49)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
+        <div style="margin-top:16px;">
+          <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
+        </div>
       </div>
     </div>`;
 
@@ -3194,6 +3197,39 @@ function saveSettingGeminiKey() {
     localStorage.setItem('gemini_api_key', val);
     showToast('Gemini APIキーを保存しました 🔑', 'success');
     navigateTo('settings');
+  }
+}
+
+async function forceUpdateApp() {
+  if (confirm('アプリの最新アップデートを強制的に取得し、再読み込みします。よろしいですか？\n(記録されたデータは削除されません)')) {
+    showToast('キャッシュを消去中... ⏳', '');
+    
+    if ('serviceWorker' in navigator) {
+      try {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        for (const registration of registrations) {
+          await registration.unregister();
+        }
+      } catch (e) {
+        console.warn('SW unregister failed:', e);
+      }
+    }
+
+    if ('caches' in window) {
+      try {
+        const keys = await caches.keys();
+        for (const key of keys) {
+          await caches.delete(key);
+        }
+      } catch (e) {
+        console.warn('Cache clear failed:', e);
+      }
+    }
+
+    showToast('再読み込みします 🔄', 'success');
+    setTimeout(() => {
+      window.location.reload(true);
+    }, 1000);
   }
 }
 
