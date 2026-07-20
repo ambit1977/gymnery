@@ -1844,16 +1844,19 @@ async function renderHistory(main) {
   main.innerHTML = `
     <div class="page">
       <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border: 1px solid var(--border-color);">
-        <button id="tab-sessions" class="btn btn-sm ${currentHistoryTab === 'sessions' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('sessions')" style="flex:1; border-radius:var(--radius-sm);">セッション履歴</button>
-        <button id="tab-machines" class="btn btn-sm ${currentHistoryTab === 'machines' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('machines')" style="flex:1; border-radius:var(--radius-sm);">種目履歴 (2週間)</button>
+        <button id="tab-sessions" class="btn btn-sm ${currentHistoryTab === 'sessions' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('sessions')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">セッション履歴</button>
+        <button id="tab-machines" class="btn btn-sm ${currentHistoryTab === 'machines' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('machines')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">種目履歴</button>
+        <button id="tab-trainer" class="btn btn-sm ${currentHistoryTab === 'trainer' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('trainer')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">🤖 AIトレーナー</button>
       </div>
       <div id="history-tab-content"></div>
     </div>`;
 
   if (currentHistoryTab === 'sessions') {
     await renderSessionsTab(document.getElementById('history-tab-content'));
-  } else {
+  } else if (currentHistoryTab === 'machines') {
     await renderMachinesTab(document.getElementById('history-tab-content'));
+  } else if (currentHistoryTab === 'trainer') {
+    await renderTrainerTab(document.getElementById('history-tab-content'));
   }
 }
 
@@ -1931,6 +1934,238 @@ async function renderSessionsTab(container) {
     setupStickyCalendarShadow();
     setupHistoryIntersectionObserver();
   }, 100);
+}
+
+async function renderTrainerTab(container) {
+  const apiKey = localStorage.getItem('gemini_api_key') || '';
+  if (!apiKey) {
+    container.innerHTML = `
+      <div class="card text-center animate-fade-in" style="padding: 24px;">
+        <div style="font-size: 3rem; margin-bottom: 12px;">🤖</div>
+        <div class="text-md font-bold mb-sm">AI専属トレーナー</div>
+        <p class="text-xs text-muted mb-lg" style="line-height: 1.6;">
+          過去のトレーニング履歴（過去1ヶ月・最大10セッション分）と体組成データを分析し、あなた専用のトレーニング評価やアドバイスを提供します。<br>
+          ご利用には <b>Gemini APIキー</b> の設定が必要です。
+        </p>
+        <button class="btn btn-primary btn-block" onclick="navigateTo('settings')">⚙️ 設定画面でAPIキーを登録する</button>
+      </div>`;
+    return;
+  }
+
+  const cachedAdvice = localStorage.getItem('gemini_last_advice');
+  const cachedTime = localStorage.getItem('gemini_last_advice_time');
+  let adviceHtml = '';
+  if (cachedAdvice) {
+    const timeStr = cachedTime ? new Date(Number(cachedTime)).toLocaleString() : '不明';
+    adviceHtml = `
+      <div class="card mt-md" style="line-height: 1.7; padding: 20px; border-left: 4px solid var(--accent);">
+        <div class="flex justify-between items-center mb-md pb-xs" style="border-bottom: 1px solid var(--border-color);">
+          <span class="text-xs font-bold text-accent">📋 前回のトレーナーアドバイス</span>
+          <span class="text-xs text-muted" style="font-size:0.65rem;">取得日: ${timeStr}</span>
+        </div>
+        <div class="markdown-body text-xs text-primary" style="word-break: break-all;">
+          ${parseSimpleMarkdown(cachedAdvice)}
+        </div>
+      </div>`;
+  }
+
+  container.innerHTML = `
+    <div class="card animate-fade-in" style="padding: 20px;">
+      <div class="flex items-center gap-sm mb-sm">
+        <span style="font-size: 1.8rem;">💪</span>
+        <div style="flex:1;">
+          <div class="text-sm font-bold">AI専属トレーナーに相談</div>
+          <p class="text-xs text-muted" style="font-size: 0.65rem;">直近10セッション（最長過去1ヶ月分）の履歴を基にアドバイスを生成します</p>
+        </div>
+      </div>
+      
+      <div id="trainer-actions">
+        <button class="btn btn-primary btn-block btn-sm" onclick="generateTrainerAdvice()">🔥 アドバイスを生成する (無料)</button>
+      </div>
+      
+      <div id="trainer-loading" style="display:none; text-align:center; padding: 24px 0;">
+        <div class="spinner mb-sm" style="margin: 0 auto; width:32px; height:32px; border:3px solid var(--border-color); border-top-color:var(--accent); border-radius:50%; animation: spin 1s linear infinite;"></div>
+        <div class="text-xs text-accent font-bold" id="trainer-loading-status">トレーニング履歴を解析中...</div>
+      </div>
+    </div>
+    <div id="trainer-result-container">${adviceHtml}</div>
+    <style>
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .markdown-body h3 { font-size: 0.9rem; font-weight: 800; color: var(--accent); margin: 16px 0 8px 0; border-bottom: 1px dashed var(--border-color); padding-bottom: 4px; }
+      .markdown-body h3:first-child { margin-top: 0; }
+      .markdown-body p { margin-bottom: 8px; line-height: 1.6; }
+      .markdown-body ul { margin-left: 16px; margin-bottom: 8px; list-style-type: disc; }
+      .markdown-body li { margin-bottom: 4px; }
+      .markdown-body strong { color: var(--text-accent); font-weight: bold; }
+    </style>`;
+}
+
+function parseSimpleMarkdown(markdown) {
+  if (!markdown) return '';
+  let html = markdown
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/^###\s+(.*$)/gim, '<h3>$1</h3>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/^\s*\*\s+(.*$)/gim, '<li>$1</li>')
+    .replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>');
+
+  html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+  html = html.split('\n\n').map(p => {
+    if (p.trim().startsWith('<h3>') || p.trim().startsWith('<ul>') || p.trim().startsWith('<li>')) return p;
+    return `<p>${p.replace(/\n/g, '<br>')}</p>`;
+  }).join('');
+
+  return html;
+}
+
+async function generateTrainerAdvice() {
+  const apiKey = localStorage.getItem('gemini_api_key') || '';
+  if (!apiKey) return;
+
+  const btnContainer = document.getElementById('trainer-actions');
+  const loadingContainer = document.getElementById('trainer-loading');
+  const loadingStatus = document.getElementById('trainer-loading-status');
+  const resultContainer = document.getElementById('trainer-result-container');
+
+  if (btnContainer && loadingContainer) {
+    btnContainer.style.display = 'none';
+    loadingContainer.style.display = 'block';
+  }
+
+  try {
+    loadingStatus.textContent = 'トレーニング履歴を収集中... 📊';
+    const allSessions = await getAllSessions();
+    const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
+    
+    const targetSessions = allSessions
+      .filter(s => {
+        const time = new Date(s.startTime).getTime();
+        if (s.id === activeSessionId && !s.endTime) return false;
+        return time >= oneMonthAgo;
+      })
+      .slice(0, 10);
+
+    if (targetSessions.length === 0) {
+      throw new Error('過去1ヶ月以内に完了したトレーニング履歴が見つかりません。まずはトレーニングを記録してください。');
+    }
+
+    loadingStatus.textContent = '詳細データを解析中... 🔍';
+    let sessionsPromptText = '';
+    for (const s of targetSessions) {
+      const exs = await getExercisesBySession(s.id);
+      const dateStr = new Date(s.startTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      sessionsPromptText += `■ セッション日時: ${dateStr}\n`;
+      sessionsPromptText += `施設: ${s.facility || '旭町南地区区民館'}\n`;
+      if (s.note) sessionsPromptText += `セッションメモ: ${s.note}\n`;
+      sessionsPromptText += `実施した種目:\n`;
+      
+      for (const ex of exs) {
+        const machine = getMachineById(ex.machineId);
+        const categoryLabel = getCategoryLabel(ex.category);
+        if (machine?.type === 'strength' && Array.isArray(ex.data)) {
+          const setsStr = ex.data.map((set, idx) => {
+            const exName = set.exercise ? ` (${set.exercise})` : '';
+            return `  - ${idx + 1}セット目: ${set.weight || 0}kg x ${set.reps || 0}回${exName}`;
+          }).join('\n');
+          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}:\n${setsStr}\n`;
+        } else if (machine?.type === 'cardio') {
+          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}: ${ex.data.duration || 0}分, ${ex.data.distance || 0}km, レベル${ex.data.level || 0}\n`;
+        }
+        if (ex.note) sessionsPromptText += `  メモ: ${ex.note}\n`;
+      }
+      sessionsPromptText += '\n';
+    }
+
+    loadingStatus.textContent = '体組成データを取得中... ⚖️';
+    const bodyCompList = await getAllBodyComposition();
+    let bodyCompPromptText = 'なし';
+    if (bodyCompList && bodyCompList.length > 0) {
+      const latest = bodyCompList[0];
+      bodyCompPromptText = `測定日: ${latest.date}, 体重: ${latest.weight || '未登録'}kg, 体脂肪率: ${latest.bodyFat || '未登録'}%, 筋肉量: ${latest.muscleMass || '未登録'}kg, BMI: ${latest.bmi || '未登録'}, 内臓脂肪レベル: ${latest.visceralFat || '未登録'}`;
+    }
+
+    loadingStatus.textContent = 'トレーナーが評価を作成中... 🧠';
+
+    const systemPrompt = `あなたは優秀なフィットネスの専属パーソナルトレーナーです。ユーザーのトレーニング履歴と最新の体組成データを分析し、専門的でありながら親しみやすく、モチベーションを高める評価と具体的なアドバイスを日本語で提供してください。`;
+    
+    const userPrompt = `以下のデータを分析し、アドバイスを作成してください。
+
+【最新の体組成データ】
+${bodyCompPromptText}
+
+【直近のトレーニング履歴（最大10回分、過去30日間）】
+${sessionsPromptText}
+
+【回答フォーマット】
+以下の見出し（###）を使って、Markdown形式で出力してください。見出し以外の行には余分なマークダウン記号（*など）を使わずシンプルに説明してください。
+### 📊 直近のトレーニング総評
+全体的な運動頻度、実施部位のバランス（上半身・下半身・体幹など）、トレーニング構成についての総評。
+
+### 💪 良かったポイント
+実施した内容の中で、特に優れている点や継続できている良い点（例：セット数の維持、徐々に重量が上がっている、定期的に通えている等）。
+
+### 🎯 今後のアドバイス・改善プラン
+次回のメニュー構成や強度の上げ方（プログレッシブ・オーバーロードの意識など）、食事や有酸素運動の取り入れ方など、具体的で実践しやすい目標。
+
+### 💬 トレーナーからのメッセージ
+ユーザーのモチベーションを引き出す力強いひと言。`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            role: 'user',
+            parts: [{ text: systemPrompt + '\n\n' + userPrompt }]
+          }
+        ]
+      })
+    });
+
+    if (!response.ok) {
+      const errJson = await response.json().catch(() => ({}));
+      throw new Error(errJson.error?.message || `HTTP ${response.status}`);
+    }
+
+    const resData = await response.json();
+    const adviceText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!adviceText) {
+      throw new Error('Gemini APIからの応答が空でした。');
+    }
+
+    localStorage.setItem('gemini_last_advice', adviceText);
+    localStorage.setItem('gemini_last_advice_time', String(Date.now()));
+
+    if (resultContainer) {
+      resultContainer.innerHTML = `
+        <div class="card mt-md" style="line-height: 1.7; padding: 20px; border-left: 4px solid var(--accent); animation: fadeSlideIn 0.3s ease;">
+          <div class="flex justify-between items-center mb-md pb-xs" style="border-bottom: 1px solid var(--border-color);">
+            <span class="text-xs font-bold text-accent">📋 最新のトレーナーアドバイス</span>
+            <span class="text-xs text-muted" style="font-size:0.65rem;">取得日: ${new Date().toLocaleString()}</span>
+          </div>
+          <div class="markdown-body text-xs text-primary" style="word-break: break-all;">
+            ${parseSimpleMarkdown(adviceText)}
+          </div>
+        </div>`;
+    }
+
+    showToast('アドバイスを生成しました！🤖', 'success');
+
+  } catch (err) {
+    console.error('Trainer advice generate failed:', err);
+    showToast(err.message, 'danger');
+  } finally {
+    if (btnContainer && loadingContainer) {
+      btnContainer.style.display = 'block';
+      loadingContainer.style.display = 'none';
+    }
+  }
 }
 
 async function renderMachinesTab(container) {
@@ -2919,6 +3154,16 @@ function renderSettings(main) {
           : `<button class="btn btn-primary btn-sm btn-block" onclick="pushSubscribe()" id="push-enable-btn">通知を有効にする</button>`
         }
       </div>
+      
+      <div class="card mb-md">
+        <div class="text-sm font-bold mb-sm">🤖 Gemini APIキー設定</div>
+        <p class="text-xs text-muted mb-md">AI専属トレーナーによるアドバイス機能を使用するための Gemini API キーを登録します。キーはブラウザにのみ保存されます。</p>
+        <div class="flex gap-sm">
+          <input type="password" class="input text-xs" id="setting-gemini-key" value="${localStorage.getItem('gemini_api_key') || ''}" placeholder="AIzaSy..." style="flex:2;">
+          <button class="btn btn-primary btn-sm" onclick="saveSettingGeminiKey()" style="flex:1;">保存</button>
+        </div>
+        <p class="text-xs text-muted mt-sm" style="font-size:0.65rem">※ APIキーは <a href="https://aistudio.google.com/" target="_blank" style="color:var(--accent); text-decoration: underline;">Google AI Studio</a> から無料で取得できます（無料枠モデル: gemini-2.5-flash）</p>
+      </div>
 
       <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">🗑 データ管理</div>
@@ -2927,7 +3172,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v47)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v48)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
       </div>
     </div>`;
@@ -2939,6 +3184,16 @@ function renderSettings(main) {
     if (dataCard) {
       dataCard.parentNode.insertBefore(sheetsDiv.firstElementChild, dataCard);
     }
+  }
+}
+
+function saveSettingGeminiKey() {
+  const input = document.getElementById('setting-gemini-key');
+  if (input) {
+    const val = input.value.trim();
+    localStorage.setItem('gemini_api_key', val);
+    showToast('Gemini APIキーを保存しました 🔑', 'success');
+    navigateTo('settings');
   }
 }
 
