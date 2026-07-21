@@ -1843,7 +1843,7 @@ async function renderHistory(main) {
   // タブ切り替え用の共通レイアウト
   main.innerHTML = `
     <div class="page">
-      <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border: 1px solid var(--border-color);">
+      <div class="flex gap-xs sticky-history-tabs">
         <button id="tab-sessions" class="btn btn-sm ${currentHistoryTab === 'sessions' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('sessions')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">セッション履歴</button>
         <button id="tab-machines" class="btn btn-sm ${currentHistoryTab === 'machines' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('machines')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">種目履歴</button>
         <button id="tab-trainer" class="btn btn-sm ${currentHistoryTab === 'trainer' ? 'btn-primary' : 'btn-ghost'}" onclick="switchHistoryTab('trainer')" style="flex:1; border-radius:var(--radius-sm); font-size:0.7rem; padding:6px 2px;">🤖 AIトレーナー</button>
@@ -3194,7 +3194,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v51)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v52)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3437,7 +3437,7 @@ async function doClearAll() {
 async function registerSW() {
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js?v=51');
+      const reg = await navigator.serviceWorker.register('sw.js?v=52');
       if (reg) {
         reg.update();
       }
