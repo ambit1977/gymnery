@@ -1097,19 +1097,19 @@ textarea.input {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--space-md);
-  margin-bottom: var(--space-lg);
+  padding: 8px 12px;
+  margin-bottom: 8px;
 }
 
 .calendar-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--space-md);
+  margin-bottom: 4px;
 }
 
 .calendar-month {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 700;
 }
 
@@ -1128,14 +1128,14 @@ textarea.input {
   text-align: center;
   font-size: 0.65rem;
   color: var(--text-muted);
-  padding: var(--space-xs);
+  padding: 2px;
   font-weight: 600;
 }
 
 .calendar-day {
   text-align: center;
-  padding: var(--space-sm);
-  font-size: 0.8rem;
+  padding: 6px;
+  font-size: 0.75rem;
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -1160,7 +1160,7 @@ textarea.input {
 .calendar-day.has-session::after {
   content: '';
   position: absolute;
-  bottom: 3px;
+  bottom: 2px;
   left: 50%;
   transform: translateX(-50%);
   width: 4px;
@@ -1533,7 +1533,7 @@ textarea.input {
 
 .sticky-calendar-wrapper {
   position: sticky;
-  top: 56px;
+  top: calc(52px + env(safe-area-inset-top, 0px));
   z-index: 100;
   background: var(--bg-primary);
   padding-bottom: 8px;
