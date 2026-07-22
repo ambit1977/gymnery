@@ -70,3 +70,57 @@ describe('getDaysDiff (app.js)', () => {
     expect(sandbox.getDaysDiff('invalid-date', new Date())).toBe(0);
   });
 });
+
+describe('UI Rendering (app.js)', () => {
+  beforeAll(() => {
+    // UI表示に必要なグローバル変数をモック
+    sandbox.GymneryFacility = {
+      name: 'テスト区民館',
+      address: '練馬区テスト1-2-3',
+      phone: '03-0000-0000',
+      openHours: '9:00 - 21:00',
+      receptionHours: '9:00 - 17:00',
+      closedDays: '年末年始',
+      gymTarget: '15歳以上',
+      gymHours: ['9:00 - 12:00'],
+      gymFee: ['100円'],
+      gymBelongings: '室内シューズ',
+      gymProcedure: '受付へどうぞ',
+      gymNotes: ['定員あり'],
+      categories: {
+        cardio: { label: '有酸素', icon: '🏃', color: '#38bdf8' }
+      },
+      machines: [
+        { id: 'treadmill', name: 'トレッドミル', category: 'cardio', type: 'cardio', sheetCol: 'T' }
+      ]
+    };
+
+    // db.jsが読み込まれていないテスト環境を考慮して最低限の取得関数を定義
+    sandbox.getAllSessions = async () => [];
+    sandbox.getLatestBodyComposition = async () => null;
+    sandbox.getCategoryIcon = (cat) => '🏃';
+    sandbox.getCategoryLabel = (cat) => '有酸素';
+    sandbox.getCategoryColor = (cat) => '#38bdf8';
+    sandbox.getDayOfWeek = () => '月';
+  });
+
+  it('should render home screen with start button when no active session', async () => {
+    const mockMain = { innerHTML: '' };
+    sandbox.activeSessionId = null;
+
+    await sandbox.renderHome(mockMain);
+
+    expect(mockMain.innerHTML).toContain('💪 トレーニング開始');
+    expect(mockMain.innerHTML).toContain('持ち物チェックリスト');
+    expect(mockMain.innerHTML).toContain('利用証');
+  });
+
+  it('should render settings screen with facility details', () => {
+    const mockMain = { innerHTML: '' };
+    sandbox.renderSettings(mockMain);
+
+    expect(mockMain.innerHTML).toContain('📍 施設情報');
+    expect(mockMain.innerHTML).toContain('テスト区民館');
+    expect(mockMain.innerHTML).toContain('会員番号設定');
+  });
+});
