@@ -1043,7 +1043,7 @@ async function showMachineSelect() {
     if (recommendedList.length > 0) {
       for (const item of recommendedList) {
         const m = item.machine;
-        const daysStr = item.diffDays === 0 ? '今日' : (item.diffDays === 1 ? '昨日' : `中 ${item.diffDays} 日`);
+        const daysStr = item.diffDays === 0 ? '今日' : (item.diffDays === 1 ? '昨日' : `中 ${item.diffDays - 1} 日`);
         const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
 
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
@@ -1097,7 +1097,7 @@ async function showMachineSelect() {
           const lastDate = new Date(past[0].createdAt);
           const diffDays = getDaysDiff(now, lastDate);
           
-          daysStr = diffDays === 0 ? '今日' : (diffDays === 1 ? '昨日' : `中 ${diffDays} 日`);
+          daysStr = diffDays === 0 ? '今日' : (diffDays === 1 ? '昨日' : `中 ${diffDays - 1} 日`);
 
           if (cat === 'upper' || cat === 'arm') {
             badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
@@ -2330,7 +2330,7 @@ async function renderMachinesTab(container) {
     } else if (diffDays === 1) {
       daysStr = '昨日';
     } else {
-      daysStr = `中 ${diffDays} 日`;
+      daysStr = `中 ${diffDays - 1} 日`;
     }
 
     // 回復度の色の計算
@@ -3289,7 +3289,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v55)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v56)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3532,7 +3532,7 @@ async function doClearAll() {
 async function registerSW() {
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js?v=55');
+      const reg = await navigator.serviceWorker.register('sw.js?v=56');
       if (reg) {
         reg.update();
       }
