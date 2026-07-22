@@ -14,6 +14,96 @@ let wakeLockSentinel = null;
 let intervalBeepAudio = null;
 
 // ========================================
+// 施設設定ロード処理 ＆ マシンヘルパー関数
+// ========================================
+window.GymneryFacility = null;
+
+async function loadFacilityConfig() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const configUrl = urlParams.get('config');
+  const facilityId = urlParams.get('facility') || 'asahicho';
+
+  let configData = null;
+
+  if (configUrl) {
+    try {
+      const res = await fetch(configUrl);
+      if (res.ok) {
+        configData = await res.json();
+      }
+    } catch (e) {
+      console.error('Failed to load external config:', e);
+    }
+  }
+
+  if (!configData && facilityId) {
+    try {
+      const res = await fetch(`config/facility_${facilityId}.json`);
+      if (res.ok) {
+        configData = await res.json();
+      }
+    } catch (e) {
+      console.error(`Failed to load preset config: facility_${facilityId}.json`, e);
+    }
+  }
+
+  // どちらも失敗した場合はデフォルト（asahicho）をロードする
+  if (!configData) {
+    try {
+      const res = await fetch('config/facility_asahicho.json');
+      if (res.ok) {
+        configData = await res.json();
+      }
+    } catch (e) {
+      console.error('Failed to load fallback config (facility_asahicho.json):', e);
+    }
+  }
+
+  if (configData) {
+    window.GymneryFacility = configData;
+    // タイトルの書き換え
+    document.title = `トレーニング記録 - ${configData.name}`;
+    const headerTitle = document.getElementById('header-subtitle');
+    if (headerTitle) {
+      headerTitle.textContent = configData.name;
+    }
+    console.log(`Loaded facility config: ${configData.name}`);
+  } else {
+    // 完全に失敗した場合の最低限のフォールバック
+    window.GymneryFacility = {
+      name: 'トレーニング室',
+      machines: [],
+      categories: {}
+    };
+  }
+}
+
+function getMachineById(id) {
+  if (!window.GymneryFacility || !window.GymneryFacility.machines) return null;
+  return window.GymneryFacility.machines.find(m => m.id === id);
+}
+
+function getMachinesByCategory(category) {
+  if (!window.GymneryFacility || !window.GymneryFacility.machines) return [];
+  return window.GymneryFacility.machines.filter(m => m.category === category);
+}
+
+function getCategoryLabel(category) {
+  if (!window.GymneryFacility || !window.GymneryFacility.categories) return category;
+  return window.GymneryFacility.categories[category]?.label || category;
+}
+
+function getCategoryIcon(category) {
+  if (!window.GymneryFacility || !window.GymneryFacility.categories) return '🏋️';
+  return window.GymneryFacility.categories[category]?.icon || '🏋️';
+}
+
+function getCategoryColor(category) {
+  if (!window.GymneryFacility || !window.GymneryFacility.categories) return '#888';
+  return window.GymneryFacility.categories[category]?.color || '#888';
+}
+
+// ========================================
 // Web Push 通知設定
 // ========================================
 const PUSH_SERVER_URL = 'https://ambit.go2020.tokyo/gymnery-push';
@@ -327,6 +417,9 @@ function ensureIntervalBeepAudio() {
 // 初期化
 // ========================================
 document.addEventListener('DOMContentLoaded', async () => {
+  // Load facility configuration first
+  await loadFacilityConfig();
+
   // Check for active session in localStorage
   activeSessionId = localStorage.getItem('activeSessionId')
     ? Number(localStorage.getItem('activeSessionId'))
@@ -412,7 +505,7 @@ function navigateTo(page) {
     settings: '設定',
   };
   headerTitle.textContent = titles[page] || 'トレーニング記録';
-  headerSubtitle.textContent = '旭町南地区区民館';
+  headerSubtitle.textContent = window.GymneryFacility?.name || 'トレーニング室';
 
   clearTimer();
   destroyCharts();
@@ -876,8 +969,9 @@ async function showMachineSelect() {
   if (currentMachineViewMode === 'recommended') {
     // === 今日おすすめ（回復済＆過去に実施したことのある種目）ビュー ===
     const recommendedList = [];
+    const machinesList = window.GymneryFacility?.machines || [];
 
-    for (const m of MACHINES) {
+    for (const m of machinesList) {
       // 実施済みのものは除外
       if (completedMachineIds.has(m.id)) {
         const past = await getExercisesByMachine(m.id);
@@ -1598,7 +1692,7 @@ async function showPastSessionMachineSelect(sessionId) {
   `;
 
   catOrder.forEach(catKey => {
-    const cat = CATEGORIES[catKey];
+    const cat = window.GymneryFacility?.categories?.[catKey] || { label: catKey, icon: '🏋️', color: '#888' };
     const catMachines = getMachinesByCategory(catKey);
     if (catMachines.length === 0) return;
 
@@ -1823,7 +1917,7 @@ async function doAddPastSession() {
     const startObj = new Date(`${dStr}T${tStartStr}:00`);
     const endObj = tEndStr ? new Date(`${dStr}T${tEndStr}:00`) : null;
     const id = await db.sessions.add({
-      facility: FACILITY.name,
+      facility: window.GymneryFacility?.name || 'トレーニング室',
       startTime: startObj.toISOString(),
       endTime: endObj ? endObj.toISOString() : null,
       note: '',
@@ -2066,7 +2160,7 @@ async function generateTrainerAdvice() {
       const exs = await getExercisesBySession(s.id);
       const dateStr = new Date(s.startTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
       sessionsPromptText += `■ セッション日時: ${dateStr}\n`;
-      sessionsPromptText += `施設: ${s.facility || '旭町南地区区民館'}\n`;
+      sessionsPromptText += `施設: ${s.facility || window.GymneryFacility?.name || 'トレーニング室'}\n`;
       if (s.note) sessionsPromptText += `セッションメモ: ${s.note}\n`;
       sessionsPromptText += `実施した種目:\n`;
       
@@ -3109,6 +3203,7 @@ async function doDeleteBody(id) {
 // 設定画面
 // ========================================
 function renderSettings(main) {
+  const FACILITY = window.GymneryFacility || {};
   main.innerHTML = `
     <div class="page">
       <div class="card mb-md" style="line-height: 1.6;">
@@ -3194,7 +3289,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v53)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v54)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3295,7 +3390,7 @@ async function showMachineDefaults() {
   const settingsMap = {};
   allSettings.forEach(s => settingsMap[s.machineId] = s.data);
 
-  const cats = Object.keys(CATEGORIES);
+  const cats = Object.keys(window.GymneryFacility?.categories || {});
   let html = `
     <div class="modal-handle"></div>
     <div class="flex items-center justify-between mb-md">
@@ -3437,7 +3532,7 @@ async function doClearAll() {
 async function registerSW() {
   if ('serviceWorker' in navigator) {
     try {
-      const reg = await navigator.serviceWorker.register('sw.js?v=53');
+      const reg = await navigator.serviceWorker.register('sw.js?v=54');
       if (reg) {
         reg.update();
       }

@@ -1,0 +1,55 @@
+{
+  "id": "template",
+  "name": "サンプルジム・施設名",
+  "address": "東京都〇〇区〇〇1-2-3",
+  "phone": "03-0000-0000",
+  "openHours": "午前10時 〜 午後10時",
+  "receptionHours": "午前10時 〜 午後8時",
+  "closedDays": "毎週月曜日",
+  "gymTarget": "16歳以上の方",
+  "gymHours": [
+    "終日利用可能"
+  ],
+  "gymFee": [
+    "一般：1回 500円"
+  ],
+  "gymBelongings": "運動着、室内履き、タオル",
+  "gymProcedure": "受付にて利用手続きを行い、スタッフに利用表を提出してください。",
+  "gymNotes": [
+    "安全のため、スタッフの指示に従ってトレーニングを行ってください。"
+  ],
+  "categories": {
+    "upper": { "label": "上半身", "icon": "💪", "color": "#4ecdc4" },
+    "lower": { "label": "下半身", "icon": "🦵", "color": "#ff6b6b" },
+    "cardio": { "label": "有酸素", "icon": "🏃", "color": "#38bdf8" }
+  },
+  "machines": [
+    {
+      "id": "sample_chest_press",
+      "name": "チェストプレス (サンプル)",
+      "category": "upper",
+      "type": "strength",
+      "sheetCol": "C",
+      "fields": [
+        { "key": "weight", "label": "重量", "unit": "kg", "type": "number", "step": 1.0, "min": 0 },
+        { "key": "reps", "label": "回数", "unit": "回", "type": "number", "step": 1, "min": 0 }
+      ],
+      "weights": [5.0, 10.0, 15.0, 20.0, 25.0, 30.0],
+      "hasSets": true,
+      "description": "胸の筋肉を鍛えるサンプルマシンです。"
+    },
+    {
+      "id": "sample_treadmill",
+      "name": "ランニングマシン (サンプル)",
+      "category": "cardio",
+      "type": "cardio",
+      "sheetCol": "D",
+      "fields": [
+        { "key": "distance", "label": "距離", "unit": "km", "type": "number", "step": 0.1, "min": 0 },
+        { "key": "duration", "label": "時間", "unit": "分", "type": "number", "step": 1, "min": 0 }
+      ],
+      "hasSets": false,
+      "description": "有酸素運動用のサンプルランニングマシンです。"
+    }
+  ]
+}

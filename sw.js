@@ -1,11 +1,11 @@
-const CACHE_NAME = 'training-app-v53';
+const CACHE_NAME = 'training-app-v54';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
   './app.js',
   './db.js',
-  './machines.js',
+  './config/facility_asahicho.json',
   './gsheets.js',
   './manifest.json',
   './images/chest_press.jpg',

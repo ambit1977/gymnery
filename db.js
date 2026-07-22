@@ -264,7 +264,8 @@ async function importDataFromCSV(fileList) {
         const createdAt = new Date(cols[6]).toISOString();
         
         // Find machine ID from name
-        const machineId = MACHINES.find(m => m.name === machineName)?.id || '';
+        const machinesList = window.GymneryFacility?.machines || [];
+        const machineId = machinesList.find(m => m.name === machineName)?.id || '';
         
         await db.exercises.put({ id, sessionId, machineId, machineName, category, type, data, createdAt });
       }
@@ -398,7 +399,7 @@ async function importGoogleSheetsCSV(csvText) {
 
       if (!session) {
         const id = await db.sessions.add({
-          facility: '旭町南地区区民館',
+          facility: window.GymneryFacility?.name || 'トレーニング室',
           startTime: new Date(startTime).toISOString(),
           endTime: new Date(startTime + 60 * 60 * 1000).toISOString(),
           note: 'スプレッドシートからインポート'
@@ -425,7 +426,8 @@ async function importGoogleSheetsCSV(csvText) {
         importedExercises++;
       }
 
-      for (const m of MACHINES) {
+      const machinesList = window.GymneryFacility?.machines || [];
+      for (const m of machinesList) {
         const colIdx = colLetterToIdx(m.sheetCol);
         if (colIdx >= cols.length) continue;
 
