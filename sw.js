@@ -1,4 +1,4 @@
-const CACHE_NAME = 'training-app-v57';
+const CACHE_NAME = 'training-app-v58';
 const ASSETS = [
   './',
   './index.html',
@@ -13,6 +13,7 @@ const ASSETS = [
   './images/leg_press.jpg',
   './images/treadmill.jpg',
   './images/bike.jpg',
+  './images/chin_dip.jpg',
 ];
 
 self.addEventListener('install', event => {
