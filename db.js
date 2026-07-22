@@ -20,7 +20,7 @@ db.version(2).stores({
 
 async function createSession() {
   const id = await db.sessions.add({
-    facility: FACILITY.name,
+    facility: window.GymneryFacility?.name || 'トレーニング室',
     startTime: new Date().toISOString(),
     endTime: null,
     note: '',
