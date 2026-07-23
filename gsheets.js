@@ -10,8 +10,8 @@ const GSHEETS_CLIENT_ID = '826506708716-5lccjontlbg22p1218lg2f9die78lfap.apps.go
 
 const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
-let gsheetsAccessToken = null;
-let gsheetsTokenExpiry = 0;
+let gsheetsAccessToken = localStorage.getItem('gs_access_token') || null;
+let gsheetsTokenExpiry = parseInt(localStorage.getItem('gs_token_expiry') || '0', 10);
 
 // ========================================
 // 認証
@@ -25,7 +25,7 @@ function gsheetsGetClientId() {
   return GSHEETS_CLIENT_ID || localStorage.getItem('gs_client_id') || '';
 }
 
-function gsheetsSignIn() {
+function gsheetsSignIn(prompt = '') {
   return new Promise((resolve, reject) => {
     const clientId = gsheetsGetClientId();
     if (!clientId) {
@@ -37,7 +37,7 @@ function gsheetsSignIn() {
       return;
     }
 
-    const tokenClient = google.accounts.oauth2.initTokenClient({
+    const config = {
       client_id: clientId,
       scope: GSHEETS_SCOPES,
       callback: (response) => {
@@ -47,11 +47,18 @@ function gsheetsSignIn() {
         }
         gsheetsAccessToken = response.access_token;
         gsheetsTokenExpiry = Date.now() + (response.expires_in - 60) * 1000;
+        localStorage.setItem('gs_access_token', gsheetsAccessToken);
+        localStorage.setItem('gs_token_expiry', String(gsheetsTokenExpiry));
         localStorage.setItem('gs_authed', '1');
         resolve(response.access_token);
       },
-    });
+    };
 
+    if (prompt) {
+      config.prompt = prompt;
+    }
+
+    const tokenClient = google.accounts.oauth2.initTokenClient(config);
     tokenClient.requestAccessToken();
   });
 }
@@ -62,6 +69,8 @@ function gsheetsSignOut() {
   }
   gsheetsAccessToken = null;
   gsheetsTokenExpiry = 0;
+  localStorage.removeItem('gs_access_token');
+  localStorage.removeItem('gs_token_expiry');
   localStorage.removeItem('gs_authed');
   showToast('Googleアカウントとの連携を解除しました', 'success');
   renderSettings(document.getElementById('main-content'));
@@ -69,7 +78,14 @@ function gsheetsSignOut() {
 
 async function gsheetsEnsureToken() {
   if (!gsheetsIsAuthorized()) {
-    await gsheetsSignIn();
+    try {
+      // ユーザー対話を伴わないサイレント取得を試みる
+      await gsheetsSignIn('');
+    } catch (err) {
+      console.warn('Silent Google sign-in failed, requesting explicit sign-in:', err);
+      // サイレント取得が失敗した場合は、ポップアップで再認可を求める
+      await gsheetsSignIn('select_account');
+    }
   }
   return gsheetsAccessToken;
 }
