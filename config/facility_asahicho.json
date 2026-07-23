@@ -102,10 +102,10 @@
       "type": "strength",
       "sheetCol": "W",
       "fields": [
-        { "key": "weight", "label": "アシスト", "unit": "kg", "type": "number", "step": 0.5, "min": 0 },
+        { "key": "weight", "label": "アシスト", "unit": "kg", "type": "number", "step": 0.1, "min": 0 },
         { "key": "reps", "label": "回数", "unit": "回", "type": "number", "step": 1, "min": 0 }
       ],
-      "weights": [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0],
+      "weights": [0.0, 6.3, 9.1, 11.9, 14.7, 17.5, 20.3, 23.1, 25.9, 31.5, 37.1, 42.7, 48.3, 53.9, 59.5, 65.1, 70.7, 76.3, 81.9, 87.5, 93.1],
       "hasSets": true,
       "image": "images/assisted_chinning.jpg",
       "videoUrl": "https://www.youtube.com/watch?v=AYOgNNllPMM",
@@ -118,10 +118,10 @@
       "type": "strength",
       "sheetCol": "X",
       "fields": [
-        { "key": "weight", "label": "アシスト", "unit": "kg", "type": "number", "step": 0.5, "min": 0 },
+        { "key": "weight", "label": "アシスト", "unit": "kg", "type": "number", "step": 0.1, "min": 0 },
         { "key": "reps", "label": "回数", "unit": "回", "type": "number", "step": 1, "min": 0 }
       ],
-      "weights": [0.0, 5.0, 10.0, 15.0, 20.0, 25.0, 30.0, 35.0, 40.0, 45.0, 50.0, 55.0, 60.0],
+      "weights": [0.0, 6.3, 9.1, 11.9, 14.7, 17.5, 20.3, 23.1, 25.9, 31.5, 37.1, 42.7, 48.3, 53.9, 59.5, 65.1, 70.7, 76.3, 81.9, 87.5, 93.1],
       "hasSets": true,
       "image": "images/assisted_dips.jpg",
       "videoUrl": "https://www.youtube.com/watch?v=hh-dJs01AVg",
