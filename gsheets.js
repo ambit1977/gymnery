@@ -10,8 +10,8 @@ const GSHEETS_CLIENT_ID = '826506708716-5lccjontlbg22p1218lg2f9die78lfap.apps.go
 
 const GSHEETS_SCOPES = 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file';
 
-let gsheetsAccessToken = localStorage.getItem('gs_access_token') || null;
-let gsheetsTokenExpiry = parseInt(localStorage.getItem('gs_token_expiry') || '0', 10);
+let gsheetsAccessToken = (typeof localStorage !== 'undefined') ? localStorage.getItem('gs_access_token') : null;
+let gsheetsTokenExpiry = (typeof localStorage !== 'undefined') ? parseInt(localStorage.getItem('gs_token_expiry') || '0', 10) : 0;
 
 // ========================================
 // 認証

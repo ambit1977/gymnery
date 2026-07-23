@@ -7,6 +7,7 @@ let sandbox;
 
 beforeAll(() => {
   // gsheets.jsが依存するグローバル関数のモック
+  const store = {};
   sandbox = {
     db: {
       sessions: { toArray: () => Promise.resolve([]) },
@@ -14,6 +15,12 @@ beforeAll(() => {
     },
     console,
     Date,
+    parseInt,
+    localStorage: {
+      getItem: (key) => store[key] || null,
+      setItem: (key, val) => { store[key] = String(val); },
+      removeItem: (key) => { delete store[key]; }
+    },
     window: {}
   };
   sandbox.window = sandbox;
