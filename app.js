@@ -230,23 +230,34 @@ async function pushEnsureSubscription() {
 
   try {
     const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
+    let sub = await reg.pushManager.getSubscription();
+    let isResubscribed = false;
+
     if (!sub) {
       console.log('Push subscription lost. Resubscribing...');
-      const newSub = await reg.pushManager.subscribe({
+      sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
       });
+      isResubscribed = true;
+    }
+
+    if (sub) {
       const res = await fetch(`${PUSH_SERVER_URL}/subscribe`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${PUSH_AUTH_TOKEN}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ subscription: newSub })
+        body: JSON.stringify({ subscription: sub })
       });
       if (res.ok) {
-        showToast('バックグラウンド通知の購読を自動復旧しました 🔔', 'success');
+        console.log('Push subscription successfully ensured/updated in background.');
+        if (isResubscribed) {
+          showToast('バックグラウンド通知の購読を自動復旧しました 🔔', 'success');
+        }
+      } else {
+        console.warn(`Push subscription update failed: HTTP ${res.status}`);
       }
     }
   } catch (e) {
@@ -3289,7 +3300,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v64)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v65)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
