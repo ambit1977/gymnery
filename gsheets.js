@@ -40,7 +40,7 @@ function gsheetsSignIn(prompt = '') {
     const config = {
       client_id: clientId,
       scope: GSHEETS_SCOPES,
-      callback: (response) => {
+      callback: async (response) => {
         if (response.error) {
           reject(new Error(response.error));
           return;
@@ -50,6 +50,15 @@ function gsheetsSignIn(prompt = '') {
         localStorage.setItem('gs_access_token', gsheetsAccessToken);
         localStorage.setItem('gs_token_expiry', String(gsheetsTokenExpiry));
         localStorage.setItem('gs_authed', '1');
+
+        try {
+          await saveAppSetting('gs_access_token', gsheetsAccessToken);
+          await saveAppSetting('gs_token_expiry', String(gsheetsTokenExpiry));
+          await saveAppSetting('gs_authed', '1');
+        } catch (dbErr) {
+          console.error('Failed to save tokens to IndexedDB:', dbErr);
+        }
+
         resolve(response.access_token);
       },
     };
@@ -63,7 +72,7 @@ function gsheetsSignIn(prompt = '') {
   });
 }
 
-function gsheetsSignOut() {
+async function gsheetsSignOut() {
   if (gsheetsAccessToken && window.google?.accounts?.oauth2) {
     google.accounts.oauth2.revoke(gsheetsAccessToken);
   }
@@ -72,11 +81,34 @@ function gsheetsSignOut() {
   localStorage.removeItem('gs_access_token');
   localStorage.removeItem('gs_token_expiry');
   localStorage.removeItem('gs_authed');
+
+  try {
+    await deleteAppSetting('gs_access_token');
+    await deleteAppSetting('gs_token_expiry');
+    await deleteAppSetting('gs_authed');
+  } catch (dbErr) {
+    console.error('Failed to delete tokens from IndexedDB:', dbErr);
+  }
+
   showToast('Googleアカウントとの連携を解除しました', 'success');
   renderSettings(document.getElementById('main-content'));
 }
 
 async function gsheetsEnsureToken() {
+  if (!gsheetsAccessToken) {
+    try {
+      gsheetsAccessToken = await getAppSetting('gs_access_token');
+      gsheetsTokenExpiry = parseInt(await getAppSetting('gs_token_expiry') || '0', 10);
+      if (gsheetsAccessToken) {
+        localStorage.setItem('gs_access_token', gsheetsAccessToken);
+        localStorage.setItem('gs_token_expiry', String(gsheetsTokenExpiry));
+        localStorage.setItem('gs_authed', '1');
+      }
+    } catch (dbErr) {
+      console.error('Failed to restore tokens from IndexedDB:', dbErr);
+    }
+  }
+
   if (!gsheetsIsAuthorized()) {
     try {
       // ユーザー対話を伴わないサイレント取得を試みる
@@ -725,7 +757,7 @@ async function gsheetsSignInAndUpdate() {
 
   try {
     // 1. Google 認証
-    await gsheetsSignIn();
+    await gsheetsSignIn('select_account');
     
     // 2. マイドライブ内から専用シートを検索 or 新規作成
     await gsheetsFindOrCreateSpreadsheet();

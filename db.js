@@ -14,6 +14,10 @@ db.version(2).stores({
   machineSettings: 'machineId'
 });
 
+db.version(3).stores({
+  appSettings: 'key'
+});
+
 // ========================================
 // セッション CRUD
 // ========================================
@@ -140,6 +144,19 @@ async function saveMachineSetting(machineId, data) {
 
 async function getAllMachineSettings() {
   return db.machineSettings.toArray();
+}
+
+async function getAppSetting(key) {
+  const res = await db.appSettings.get(key);
+  return res ? res.value : null;
+}
+
+async function saveAppSetting(key, value) {
+  await db.appSettings.put({ key, value });
+}
+
+async function deleteAppSetting(key) {
+  await db.appSettings.delete(key);
 }
 
 // ========================================

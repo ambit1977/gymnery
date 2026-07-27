@@ -8,11 +8,15 @@ let sandbox;
 beforeAll(() => {
   // gsheets.jsが依存するグローバル関数のモック
   const store = {};
+  const dbStore = {};
   sandbox = {
     db: {
       sessions: { toArray: () => Promise.resolve([]) },
       exercises: { toArray: () => Promise.resolve([]) }
     },
+    getAppSetting: (key) => Promise.resolve(dbStore[key] || null),
+    saveAppSetting: (key, val) => { dbStore[key] = String(val); return Promise.resolve(); },
+    deleteAppSetting: (key) => { delete dbStore[key]; return Promise.resolve(); },
     console,
     Date,
     parseInt,
