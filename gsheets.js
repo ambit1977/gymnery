@@ -748,6 +748,54 @@ function gsheetsSettingsHtml() {
         <p class="text-xs text-muted mt-sm" style="text-align:center">✅ Google アカウント連携済み</p>
       ` : ''}
     </div>
+
+    <!-- 共有 & QR表示 -->
+    <div class="card mb-md">
+      <div class="text-sm font-bold mb-sm">🔗 このアプリを共有する</div>
+      <p class="text-xs text-muted mb-md">他のデバイスや知り合いにこのアプリを共有できます。</p>
+      <div class="qr-container">
+        <img class="qr-image" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(location.href)}" alt="QR Code">
+        <button class="btn btn-ghost btn-sm text-xs" onclick="copyShareUrl()" style="border:1px solid var(--border-color); width: 100%;">📋 URLをコピーする</button>
+      </div>
+    </div>
+
+    <!-- PWAインストールヘルプ -->
+    <div class="card mb-md">
+      <div class="text-sm font-bold mb-sm">📱 ホーム画面に追加（PWA）</div>
+      <p class="text-xs text-muted mb-sm">ホーム画面に追加すると、オフライン環境でもアプリのように高速起動できます。</p>
+      
+      <div class="help-guide-accordion">
+        <button class="help-guide-trigger" onclick="toggleHelpAccordion(this)">
+          <span>iPhone (Safari) での追加方法</span>
+          <span class="trigger-icon">▶</span>
+        </button>
+        <div class="help-guide-content">
+          1. <strong>Safari</strong>でこのページを開きます。<br>
+          2. 画面下部の<strong>共有ボタン</strong>（四角から上矢印が出ているアイコン 📤）をタップします。<br>
+          3. メニューを下にスクロールし、<strong>「ホーム画面に追加」</strong>をタップします。<br>
+          4. 右上の<strong>「追加」</strong>をタップするとホーム画面にアイコンが作成されます。
+        </div>
+      </div>
+
+      <div class="help-guide-accordion" style="margin-top: 8px;">
+        <button class="help-guide-trigger" onclick="toggleHelpAccordion(this)">
+          <span>Android (Chrome) での追加方法</span>
+          <span class="trigger-icon">▶</span>
+        </button>
+        <div class="help-guide-content">
+          1. <strong>Chrome</strong>でこのページを開きます。<br>
+          2. メニューアイコン（縦の<strong>「⋮」</strong>）をタップします。<br>
+          3. <strong>「アプリをインストール」</strong>または<strong>「ホーム画面に追加」</strong>をタップします。<br>
+          4. 画面の指示に従って<strong>「インストール」</strong>をタップします。
+        </div>
+      </div>
+    </div>
+
+    <!-- その他設定 -->
+    <div class="card mb-md">
+      <div class="text-sm font-bold mb-sm">🛠 その他</div>
+      <button class="btn btn-ghost btn-sm text-xs" onclick="resetOnboardingWizard()" style="border:1px dashed var(--border-color); width: 100%; color:var(--text-secondary);">🔄 初期セットアップウィザードをやり直す</button>
+    </div>
   `;
 }
 

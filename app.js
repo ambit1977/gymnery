@@ -462,6 +462,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   registerSW();
   pushEnsureSubscription();
   restoreIntervalTimer();
+  checkOnboardingWizard();
 });
 
 async function handleUrlParamsImport() {
@@ -3300,7 +3301,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v66)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v67)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3859,4 +3860,201 @@ function triggerMonthScroll(year, month) {
     isScrollingToAnchor = false;
   }
 }
+
+// ========================================
+// 初回起動ウィざーど (Onboarding Wizard)
+// ========================================
+async function checkOnboardingWizard() {
+  let completed = localStorage.getItem('gs_wizard_completed') === '1';
+  if (!completed) {
+    try {
+      const dbCompleted = await getAppSetting('gs_wizard_completed');
+      if (dbCompleted === '1') {
+        completed = true;
+        localStorage.setItem('gs_wizard_completed', '1');
+      }
+    } catch (e) {
+      console.warn('Failed to fetch wizard status from IndexedDB:', e);
+    }
+  }
+
+  if (!completed) {
+    showOnboardingWizard();
+  }
+}
+
+function showOnboardingWizard() {
+  // すでにUIが存在する場合は消す
+  const existing = document.getElementById('wizard-overlay');
+  if (existing) existing.remove();
+
+  const wizardHtml = `
+    <div id="wizard-overlay" class="wizard-overlay">
+      <div class="wizard-container">
+        <button class="wizard-skip-btn" onclick="skipWizard()">スキップ ✕</button>
+        
+        <!-- Step 1 -->
+        <div id="wizard-step-1" class="wizard-step active">
+          <div style="font-size: 2.2rem; margin-bottom: 12px;">🏋️‍♂️</div>
+          <h2 class="text-base font-bold mb-md" style="margin-top:0">Gymny へようこそ！</h2>
+          <p class="text-xs text-muted mb-lg" style="line-height: 1.6; text-align: left;">
+            Gymnyはトレーニング室でのワークアウトを記録・管理するアプリです。<br><br>
+            現在の対象施設:<br>
+            <strong style="color: var(--accent); font-size: 0.85rem;">📍 ${window.GymneryFacility?.name || 'トレーニング室'}</strong>
+          </p>
+          <button class="btn btn-primary" onclick="nextWizardStep(2)" style="width:100%">初期設定を始める</button>
+        </div>
+
+        <!-- Step 2 -->
+        <div id="wizard-step-2" class="wizard-step">
+          <div style="font-size: 2.2rem; margin-bottom: 12px;">📊</div>
+          <h2 class="text-base font-bold mb-md" style="margin-top:0">Google スプレッドシート連携</h2>
+          <p class="text-xs text-muted mb-lg" style="line-height: 1.6; text-align: left;">
+            Googleアカウントと連携すると、トレーニングの記録が自動的にお手持ちのスプレッドシートにバックアップ・同期されます。
+          </p>
+          <button class="btn btn-primary mb-sm" onclick="gsheetsSignInAndUpdateWizard()" style="width:100%">Googleでログインして連携</button>
+          <button class="btn btn-ghost text-xs" onclick="nextWizardStep(3)" style="width:100%; border:1px solid var(--border-color)">連携せずに次へ（後でも設定できます）</button>
+        </div>
+
+        <!-- Step 3 -->
+        <div id="wizard-step-3" class="wizard-step">
+          <div style="font-size: 2.2rem; margin-bottom: 12px;">⏱</div>
+          <h2 class="text-base font-bold mb-md" style="margin-top:0">インターバル通知設定</h2>
+          <p class="text-xs text-muted mb-lg" style="line-height: 1.6; text-align: left;">
+            セット間のインターバルタイマーの終了を、スマホのバックグラウンド通知でお知らせします。
+          </p>
+          <button class="btn btn-primary mb-sm" onclick="pushSubscribeWizard()" style="width:100%">通知を有効にする</button>
+          <button class="btn btn-ghost text-xs" onclick="nextWizardStep(4)" style="width:100%; border:1px solid var(--border-color)">通知なしで次へ</button>
+        </div>
+
+        <!-- Step 4 -->
+        <div id="wizard-step-4" class="wizard-step">
+          <div style="font-size: 2.2rem; margin-bottom: 12px;">💪</div>
+          <h2 class="text-base font-bold mb-md" style="margin-top:0">準備完了！</h2>
+          <p class="text-xs text-muted mb-lg" style="line-height: 1.6; text-align: left;">
+            お疲れ様でした。これで基本設定は完了です。<br><br>
+            トレーニング室の受付では、会員証の提示や持ち物チェックリストを活用してスマートに入場しましょう！
+          </p>
+          <button class="btn btn-primary" onclick="completeWizard()" style="width:100%">トレーニングを開始する！</button>
+        </div>
+
+        <!-- Indicator Dots -->
+        <div class="wizard-dots">
+          <span class="wizard-dot active" id="wizard-dot-1"></span>
+          <span class="wizard-dot" id="wizard-dot-2"></span>
+          <span class="wizard-dot" id="wizard-dot-3"></span>
+          <span class="wizard-dot" id="wizard-dot-4"></span>
+        </div>
+      </div>
+    </div>
+  `;
+  
+  document.body.insertAdjacentHTML('beforeend', wizardHtml);
+  setTimeout(() => {
+    document.getElementById('wizard-overlay')?.classList.add('active');
+  }, 100);
+}
+
+window.nextWizardStep = function(stepNum) {
+  // 全ステップ非表示
+  document.querySelectorAll('.wizard-step').forEach(step => {
+    step.classList.remove('active');
+  });
+  // 該当ステップ表示
+  const targetStep = document.getElementById(`wizard-step-${stepNum}`);
+  if (targetStep) targetStep.classList.add('active');
+
+  // インジケータードット更新
+  document.querySelectorAll('.wizard-dot').forEach(dot => {
+    dot.classList.remove('active');
+  });
+  const targetDot = document.getElementById(`wizard-dot-${stepNum}`);
+  if (targetDot) targetDot.classList.add('active');
+};
+
+window.skipWizard = async function() {
+  await finishWizard();
+  showToast('ウィざーどをスキップしました', 'info');
+};
+
+window.completeWizard = async function() {
+  await finishWizard();
+  showToast('ウィざーどを完了しました！トレーニングを始めましょう💪', 'success');
+};
+
+async function finishWizard() {
+  localStorage.setItem('gs_wizard_completed', '1');
+  try {
+    await saveAppSetting('gs_wizard_completed', '1');
+  } catch (e) {
+    console.warn('Failed to save wizard status to IndexedDB:', e);
+  }
+  
+  const overlay = document.getElementById('wizard-overlay');
+  if (overlay) {
+    overlay.classList.remove('active');
+    setTimeout(() => overlay.remove(), 400);
+  }
+}
+
+window.resetOnboardingWizard = async function() {
+  localStorage.removeItem('gs_wizard_completed');
+  try {
+    await deleteAppSetting('gs_wizard_completed');
+  } catch (e) {
+    console.warn(e);
+  }
+  showOnboardingWizard();
+};
+
+window.gsheetsSignInAndUpdateWizard = async function() {
+  const authed = localStorage.getItem('gs_authed') === '1';
+  if (authed) {
+    window.nextWizardStep(3);
+    return;
+  }
+  try {
+    await GymneryGSheets.gsheetsSignIn('select_account');
+    await GymneryGSheets.gsheetsFindOrCreateSpreadsheet();
+    showToast('Googleアカウントと連携しました ✅', 'success');
+    window.nextWizardStep(3);
+  } catch (e) {
+    showToast(`連携エラー: ${e.message}`, 'danger');
+  }
+};
+
+window.pushSubscribeWizard = async function() {
+  if (localStorage.getItem('push_enabled') === '1') {
+    window.nextWizardStep(4);
+    return;
+  }
+  try {
+    await pushSubscribe();
+    window.nextWizardStep(4);
+  } catch (e) {
+    console.warn(e);
+    // 失敗しても次へ進めるようにする
+    window.nextWizardStep(4);
+  }
+};
+
+// ========================================
+// 共有 & ヘルプ用ヘルパー関数
+// ========================================
+window.copyShareUrl = function() {
+  const url = location.href;
+  navigator.clipboard.writeText(url).then(() => {
+    showToast('共有URLをコピーしました！ 📋', 'success');
+  }).catch(err => {
+    showToast('コピーに失敗しました', 'danger');
+  });
+};
+
+window.toggleHelpAccordion = function(btn) {
+  btn.classList.toggle('active');
+  const triggerIcon = btn.querySelector('.trigger-icon');
+  if (triggerIcon) {
+    triggerIcon.textContent = btn.classList.contains('active') ? '▼' : '▶';
+  }
+};
 
