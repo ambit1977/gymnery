@@ -1505,21 +1505,25 @@ function startIntervalTimer(machineId, skipSchedule = false) {
         pushCancel('interval'); // フォアグラウンドでタイムアップしたので通知をキャンセル
 
         // 🔔 音声アラート（iOSサイレントスイッチでも鳴る）
-        audio.currentTime = 0;
-        audio.play().catch(() => {
-          // フォールバック: Web Audio oscillator
-          try {
-            const ctx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = ctx.createOscillator();
-            osc.frequency.value = 880;
-            osc.connect(ctx.destination);
-            osc.start();
-            setTimeout(() => osc.stop(), 500);
-          } catch (e) {}
-        });
+        // タイムアップ予定時刻から3秒以上経過した後の復帰（バックグラウンドから戻ってきた時など）の場合は音を鳴らさない
+        const isRestoredFromBackground = (Date.now() - intervalTimerEndTime) > 3000;
+        if (!isRestoredFromBackground) {
+          audio.currentTime = 0;
+          audio.play().catch(() => {
+            // フォールバック: Web Audio oscillator
+            try {
+              const ctx = new (window.AudioContext || window.webkitAudioContext)();
+              const osc = ctx.createOscillator();
+              osc.frequency.value = 880;
+              osc.connect(ctx.destination);
+              osc.start();
+              setTimeout(() => osc.stop(), 500);
+            } catch (e) {}
+          });
 
-        // 📳 バイブレーション（Android用、既存動作維持）
-        if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+          // 📳 バイブレーション（Android用、既存動作維持）
+          if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+        }
 
         // ✨ 視覚フラッシュ + トースト
         display.classList.add('interval-flash');
@@ -3301,7 +3305,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v67)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v68)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
