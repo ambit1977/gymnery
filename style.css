@@ -205,6 +205,10 @@ body::before {
   padding-bottom: var(--safe-bottom);
 }
 
+.bottom-nav.keyboard-open {
+  display: none !important;
+}
+
 .bottom-nav-inner {
   display: flex;
   justify-content: space-around;

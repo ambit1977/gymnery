@@ -3347,7 +3347,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v73)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v74)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4101,4 +4101,56 @@ window.toggleHelpAccordion = function(btn) {
     triggerIcon.textContent = btn.classList.contains('active') ? '▼' : '▶';
   }
 };
+
+// ========================================
+// iOS等におけるキーボード出現時のボトムナビ浮きバグ回避
+// ========================================
+(function() {
+  let initialHeight = window.innerHeight;
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+      const bottomNav = document.getElementById('bottom-nav');
+      if (!bottomNav) return;
+      // 高さが初期値から20%以上縮んだらキーボードが出たとみなす
+      if (window.innerHeight < initialHeight * 0.8) {
+        bottomNav.classList.add('keyboard-open');
+      } else {
+        bottomNav.classList.remove('keyboard-open');
+      }
+      // 強制再描画（浮きバグ回避）
+      bottomNav.style.display = 'none';
+      bottomNav.offsetHeight; // reflow
+      bottomNav.style.display = '';
+    }, 100);
+  });
+  
+  // input/textarea フォーカス連動
+  document.addEventListener('focusin', (e) => {
+    const tag = e.target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      document.getElementById('bottom-nav')?.classList.add('keyboard-open');
+    }
+  });
+  
+  document.addEventListener('focusout', (e) => {
+    const tag = e.target?.tagName?.toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') {
+      setTimeout(() => {
+        const activeTag = document.activeElement?.tagName?.toLowerCase();
+        if (activeTag !== 'input' && activeTag !== 'textarea' && activeTag !== 'select') {
+          const bottomNav = document.getElementById('bottom-nav');
+          if (bottomNav) {
+            bottomNav.classList.remove('keyboard-open');
+            // 強制再描画
+            bottomNav.style.display = 'none';
+            bottomNav.offsetHeight; // reflow
+            bottomNav.style.display = '';
+          }
+        }
+      }, 100);
+    }
+  });
+})();
 
