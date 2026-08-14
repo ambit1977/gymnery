@@ -1263,9 +1263,14 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
       </div>`;
   }
 
+  const badgesHtml = await getPastThreeGrowthBadgesHtml(machineId);
+
   let html = `<div class="modal-handle"></div>
     ${timerHeaderHtml}
-    <div class="modal-title">${getCategoryIcon(machine.category)} ${machine.name}</div>`;
+    <div class="modal-title" style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 24px;">
+      <div>${getCategoryIcon(machine.category)} ${machine.name}</div>
+      ${badgesHtml}
+    </div>`;
 
   if (machine.type === 'strength' && machine.hasSets) {
     let defaultSets = lastData && Array.isArray(lastData) ? lastData : [{}];
@@ -3342,7 +3347,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v72)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v73)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
