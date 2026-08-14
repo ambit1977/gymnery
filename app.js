@@ -3305,7 +3305,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v68)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v69)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3315,10 +3315,8 @@ function renderSettings(main) {
 
   if (window.GymneryGSheets && window.GymneryGSheets.settingsHtml) {
     const dataCard = main.querySelector('.page .card:nth-child(4)'); // 元の4に戻す
-    const sheetsDiv = document.createElement('div');
-    sheetsDiv.innerHTML = window.GymneryGSheets.settingsHtml();
     if (dataCard) {
-      dataCard.parentNode.insertBefore(sheetsDiv.firstElementChild, dataCard);
+      dataCard.insertAdjacentHTML('beforebegin', window.GymneryGSheets.settingsHtml());
     }
   }
 }
