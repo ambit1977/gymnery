@@ -265,6 +265,20 @@ async function pushEnsureSubscription() {
   }
 }
 
+let _sessionCacheForDates = null;
+async function getExerciseDate(exercise) {
+  if (!exercise) return null;
+  if (!_sessionCacheForDates) {
+    const sessions = await getAllSessions();
+    _sessionCacheForDates = new Map(sessions.map(s => [s.id, s.startTime || s.createdAt]));
+  }
+  const st = _sessionCacheForDates.get(exercise.sessionId);
+  return st ? new Date(st) : new Date(exercise.createdAt);
+}
+function clearSessionDateCache() {
+  _sessionCacheForDates = null;
+}
+
 function getDaysDiff(date1, date2) {
   if (!date1 || !date2) return 0;
   const dObj1 = date1 instanceof Date ? date1 : new Date(date1);
@@ -867,6 +881,7 @@ async function renderHome(main) {
 // セッション操作
 // ========================================
 async function startNewSession() {
+  clearSessionDateCache();
   activeSessionId = await createSession();
   localStorage.setItem('activeSessionId', activeSessionId);
   showToast('トレーニング開始！💪', 'success');
@@ -889,6 +904,7 @@ function confirmEndSession() {
 }
 
 async function doEndSession() {
+  clearSessionDateCache();
   const note = document.getElementById('session-note')?.value || '';
   await endSession(activeSessionId, note);
   const sid = activeSessionId;
@@ -995,7 +1011,7 @@ async function showMachineSelect() {
       // 実施済みのものは除外
       if (completedMachineIds.has(m.id)) {
         const past = await getExercisesByMachine(m.id);
-        const lastDate = past && past.length > 0 ? new Date(past[0].createdAt) : null;
+        const lastDate = past && past.length > 0 ? await getExerciseDate(past[0]) : null;
         const badgesHtml = await getPastThreeGrowthBadgesHtml(m.id);
         
         let daysStr = '今日';
@@ -1026,7 +1042,7 @@ async function showMachineSelect() {
       const past = await getExercisesByMachine(m.id);
       if (!past || past.length === 0) continue; // 過去に一度もやったことがないものはここには出さない（部位別で選ぶ）
 
-      const lastDate = new Date(past[0].createdAt);
+      const lastDate = await getExerciseDate(past[0]);
       const diffDays = getDaysDiff(now, lastDate);
 
       // 回復判定
@@ -1120,7 +1136,7 @@ async function showMachineSelect() {
         let badgeBg = '#4ecdc415';
 
         if (past && past.length > 0) {
-          const lastDate = new Date(past[0].createdAt);
+          const lastDate = await getExerciseDate(past[0]);
           const diffDays = getDaysDiff(now, lastDate);
           
           daysStr = diffDays === 0 ? '今日' : (diffDays === 1 ? '昨日' : `中 ${diffDays - 1} 日`);
@@ -2323,11 +2339,14 @@ async function renderMachinesTab(container) {
   
   // すべてのエクササイズ履歴を取得
   const exercises = await getAllExercises();
+  for (const e of exercises) {
+    e._resolvedDate = await getExerciseDate(e);
+  }
   
   // マシンIDごとの最終実施日をマッピング
   const lastExecutionMap = new Map();
   exercises.forEach(e => {
-    const date = new Date(e.createdAt);
+    const date = e._resolvedDate;
     if (!lastExecutionMap.has(e.machineId) || date > lastExecutionMap.get(e.machineId)) {
       lastExecutionMap.set(e.machineId, date);
     }
@@ -2601,10 +2620,11 @@ async function renderWeightChart() {
   for (const machineId of checkedMachineIds) {
     const exercises = await getExercisesByMachine(machineId);
     const sorted = [...exercises].reverse(); // 古い順（時系列）
+    for (const e of sorted) { e._resolvedDate = await getExerciseDate(e); }
     machineDataMap.set(machineId, sorted);
     
     sorted.forEach(e => {
-      const dateLabel = formatDate(e.createdAt).slice(5); // "MM/DD"
+      const dateLabel = formatDate(e._resolvedDate).slice(5); // "MM/DD"
       allDatesSet.add(dateLabel);
     });
   }
@@ -2615,8 +2635,8 @@ async function renderWeightChart() {
   for (const [id, list] of machineDataMap.entries()) {
     allExercises.push(...list);
   }
-  allExercises.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-  const uniqueDateLabels = [...new Set(allExercises.map(e => formatDate(e.createdAt).slice(5)))];
+  allExercises.sort((a, b) => a._resolvedDate - b._resolvedDate);
+  const uniqueDateLabels = [...new Set(allExercises.map(e => formatDate(e._resolvedDate).slice(5)))];
 
   // データセットを作成
   const datasets = checkedMachineIds.map((machineId, idx) => {
@@ -2626,7 +2646,7 @@ async function renderWeightChart() {
     // 日付ごとの最大重量マップを作成
     const weightMapByDate = new Map();
     sortedList.forEach(e => {
-      const dateLabel = formatDate(e.createdAt).slice(5);
+      const dateLabel = formatDate(e._resolvedDate).slice(5);
       let maxWeight = 0;
       if (Array.isArray(e.data)) {
         maxWeight = Math.max(...e.data.map(s => s.weight || 0));
@@ -3322,7 +3342,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v71)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v72)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
