@@ -728,8 +728,8 @@ async function renderHome(main) {
         </div>
         <div class="text-sm mb-md">${exercises.length > 0 ? `${exercises.length}種目 記録済み` : 'まだ記録がありません'}</div>
         ${exListHtml}
-        <div class="flex gap-sm mt-md">
-          <button class="btn btn-primary btn-sm" onclick="showMachineSelect()" style="flex:1">＋ マシン記録</button>
+        <div class="flex gap-sm mt-md" style="margin-right: 28px;">
+          <button class="btn btn-primary btn-sm btn-pulse" onclick="showMachineSelect()" style="flex:2">＋ マシン記録</button>
           <button class="btn btn-secondary btn-sm" onclick="confirmEndSession()" style="flex:1">終了</button>
         </div>
       </div>`;
@@ -941,9 +941,13 @@ let currentMachineSortOrder = 'newest';    // 'newest' or 'oldest'
 async function showMachineSelect() {
   const catOrder = ['cardio', 'upper', 'lower', 'core', 'arm'];
   
-  // 今日のセッションで実施済みのマシンIDを取得
+  // 今日のセッションで実施済みのマシンIDと部位(カテゴリ)を取得
   const activeExs = activeSessionId ? await getExercisesBySession(activeSessionId) : [];
   const completedMachineIds = new Set(activeExs.map(e => e.machineId));
+  const completedCategories = new Set(activeExs.map(e => {
+    const machine = getMachineById(e.machineId);
+    return machine ? machine.category : null;
+  }).filter(c => c !== null));
 
   const now = new Date();
 
@@ -997,7 +1001,10 @@ async function showMachineSelect() {
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
-                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">
+                  ${m.name}
+                  ${completedCategories.has(m.category) ? `<span style="font-size: 0.7rem; color: #ff9800; font-weight: normal; margin-left: 4px; display: inline-flex; align-items: center;" title="この部位は既に鍛えています">(！)部位済</span>` : ''}
+                </div>
                 ${badgesHtml}
               </div>
             </div>
@@ -1064,7 +1071,10 @@ async function showMachineSelect() {
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
-                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">
+                  ${m.name}
+                  ${completedCategories.has(m.category) ? `<span style="font-size: 0.7rem; color: #ff9800; font-weight: normal; margin-left: 4px; display: inline-flex; align-items: center;" title="この部位は既に鍛えています">(！)部位済</span>` : ''}
+                </div>
                 ${badgesHtml}
               </div>
             </div>
@@ -1127,7 +1137,10 @@ async function showMachineSelect() {
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
-                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
+                <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">
+                  ${m.name}
+                  ${completedCategories.has(m.category) ? `<span style="font-size: 0.7rem; color: #ff9800; font-weight: normal; margin-left: 4px; display: inline-flex; align-items: center;" title="この部位は既に鍛えています">(！)部位済</span>` : ''}
+                </div>
                 ${badgesHtml}
               </div>
             </div>
@@ -3305,7 +3318,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v69)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v70)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
