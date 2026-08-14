@@ -656,7 +656,11 @@ async function adjustStartTime(deltaMinutes) {
 }
 
 function destroyCharts() {
-  Object.values(chartInstances).forEach(c => c.destroy());
+  Object.values(chartInstances).forEach(c => {
+    if (c && typeof c.destroy === 'function') {
+      c.destroy();
+    }
+  });
   chartInstances = {};
 }
 
@@ -2582,7 +2586,7 @@ async function renderWeightChart() {
   if (checkedMachineIds.length === 0) {
     if (chartInstances['weight']) {
       chartInstances['weight'].destroy();
-      chartInstances['weight'] = null;
+      delete chartInstances['weight'];
     }
     // 空の表示
     const canvasContext = ctx.getContext('2d');
@@ -3318,7 +3322,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v70)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v71)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
