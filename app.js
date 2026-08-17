@@ -821,11 +821,14 @@ async function renderHome(main) {
 
   let checklistItems = JSON.parse(localStorage.getItem('custom_checklist') || 'null');
   if (!checklistItems) {
-    // 既存ユーザー（状態が保存されている）かどうか
-    const hasStates = localStorage.getItem('checklist_states');
-    if (hasStates) {
+    // 既存ユーザー判定: 過去のトレーニングデータがあるかどうかで判別
+    // (checklist_statesは毎回セットされるので判定に使えない)
+    const hasExistingData = localStorage.getItem('last_session_id') || localStorage.getItem('member_id');
+    if (hasExistingData) {
+      // 既存ユーザー: 洗面用具類を含む旧デフォルトを維持
       checklistItems = ['靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル', '替靴下', '替下着', '替シャツ', '替ズボン', '洗面用具類', 'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋', 'プロテイン飲む', 'ティッシュ / ウェットティッシュ'];
     } else {
+      // 新規ユーザー: 洗面用具類なし
       checklistItems = ['靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル', '替靴下', '替下着', '替シャツ', '替ズボン', 'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋', 'プロテイン飲む', 'ティッシュ / ウェットティッシュ'];
     }
     localStorage.setItem('custom_checklist', JSON.stringify(checklistItems));
@@ -3316,20 +3319,6 @@ function renderSettings(main) {
           <ul style="margin: 2px 0 0 14px; padding: 0; list-style-type: square; font-size: var(--font-size-xs); color: var(--text-muted);">
             ${FACILITY.gymNotes.map(n => `<li>${n}</li>`).join('')}
           </ul>
-        </div>
-      </div>
-
-      
-      <!-- Muscle Recovery Map -->
-      <div class="card mb-md">
-        <div class="text-sm font-bold mb-md">🧍 筋肉リカバリーマップ</div>
-        <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative; height:240px;">
-          <!-- SVG is dynamically generated below -->
-        </div>
-        <div class="flex justify-center gap-md mt-sm text-xs">
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>今日/未回復</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復済み</span>
         </div>
       </div>
 
