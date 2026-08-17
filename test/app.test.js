@@ -95,8 +95,9 @@ describe('UI Rendering (app.js)', () => {
       ]
     };
 
-    // db.jsが読み込まれていないテスト環境を考慮して最低限の取得関数を定義
     sandbox.getAllSessions = async () => [];
+    sandbox.getAllExercises = async () => [];
+    sandbox.ensureDateCache = async () => {};
     sandbox.getLatestBodyComposition = async () => null;
     sandbox.getCategoryIcon = (cat) => '🏃';
     sandbox.getCategoryLabel = (cat) => '有酸素';
@@ -122,5 +123,19 @@ describe('UI Rendering (app.js)', () => {
     expect(mockMain.innerHTML).toContain('📍 施設情報');
     expect(mockMain.innerHTML).toContain('テスト区民館');
     expect(mockMain.innerHTML).toContain('会員番号設定');
+  });
+
+  it('should render stats screen with muscle map', async () => {
+    const mockMain = { innerHTML: '' };
+    // モックの document.getElementById を stats 用に拡張
+    sandbox.document.getElementById = (id) => {
+      if (id === 'muscle-map-container') return { innerHTML: '' };
+      return { addEventListener: () => {} };
+    };
+    
+    await sandbox.renderStats(mockMain);
+
+    expect(mockMain.innerHTML).toContain('🧍 筋肉リカバリーマップ');
+    expect(mockMain.innerHTML).toContain('総セッション');
   });
 });
