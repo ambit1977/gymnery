@@ -4338,16 +4338,39 @@ async function renderMuscleMap() {
   const container = document.getElementById('muscle-map-container');
   if (!container) return;
   
-  await ensureDateCache();
+  let exercises = [];
+  try {
+    exercises = await getAllExercises();
+  } catch (e) {
+    console.error(e);
+  }
+  
   const cats = ['upper', 'lower', 'core', 'arm'];
   const recoveryMap = {};
   
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
   for (const c of cats) {
     const machines = window.GymneryFacility.machines.filter(m => m.category === c);
+    const machineIds = new Set(machines.map(m => m.id));
+    
+    const catExercises = exercises.filter(e => machineIds.has(e.machineId));
     let minDays = 999;
-    for (const m of machines) {
-      const d = await calculateRecoveryDays(m.id);
-      if (d !== null && d < minDays) minDays = d;
+    
+    if (catExercises.length > 0) {
+      let maxTime = 0;
+      for (const e of catExercises) {
+        if (e.createdAt > maxTime) maxTime = e.createdAt;
+      }
+      const lastDate = new Date(maxTime);
+      const lastDay = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
+      const diffTime = today.getTime() - lastDay.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 3600 * 24));
+      
+      if (diffDays >= 0 && diffDays < minDays) {
+        minDays = diffDays;
+      }
     }
     
     let color = '#374151'; // default dark gray
