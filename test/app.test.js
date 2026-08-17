@@ -19,9 +19,11 @@ beforeAll(() => {
     },
     document: {
       addEventListener: () => {},
-      getElementById: () => ({ addEventListener: () => {} }),
+      getElementById: () => ({ addEventListener: () => {}, remove: () => {} }),
       querySelector: () => null,
-      querySelectorAll: () => []
+      querySelectorAll: () => [],
+      createElement: () => ({ appendChild: () => {}, addEventListener: () => {}, remove: () => {} }),
+      body: { appendChild: () => {} }
     },
     addEventListener: () => {},
     window: {},
@@ -138,4 +140,24 @@ describe('UI Rendering (app.js)', () => {
     expect(mockMain.innerHTML).toContain('🧍 筋肉リカバリーマップ');
     expect(mockMain.innerHTML).toContain('総セッション');
   });
+
+  it('should manage exercise draft correctly', () => {
+    expect(sandbox.currentExerciseDraft).toBeNull();
+
+    // 手動で下書きオブジェクトをセット
+    sandbox.currentExerciseDraft = {
+      machineId: 'treadmill',
+      type: 'cardio',
+      data: { distance: 3.5, speed: 9.0 },
+      note: 'テストメモ'
+    };
+
+    expect(sandbox.currentExerciseDraft.machineId).toBe('treadmill');
+    expect(sandbox.currentExerciseDraft.data.distance).toBe(3.5);
+
+    // 下書きクリア
+    sandbox.clearExerciseDraft();
+    expect(sandbox.currentExerciseDraft).toBeNull();
+  });
 });
+

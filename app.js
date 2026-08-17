@@ -533,9 +533,18 @@ function navigateTo(page) {
   headerTitle.textContent = titles[page] || 'トレーニング記録';
   headerSubtitle.textContent = window.GymneryFacility?.name || 'トレーニング室';
 
+  const activeModal = document.querySelector('.modal-overlay');
+  if (activeModal && activeModal.dataset.isExercise === 'true') {
+    const machineId = activeModal.dataset.machineId;
+    const editId = activeModal.dataset.editExerciseId ? Number(activeModal.dataset.editExerciseId) : null;
+    const targetId = activeModal.dataset.targetSessionId ? Number(activeModal.dataset.targetSessionId) : null;
+    saveExerciseDraft(machineId, editId, targetId);
+    closeModal(true);
+  }
   clearTimer();
   destroyCharts();
   renderPage(page);
+  renderActiveExerciseBar();
 }
 
 async function renderPage(page) {
@@ -1227,10 +1236,157 @@ function toggleMachineSortOrder() {
 // ========================================
 // エクササイズ入力
 // ========================================
-async function openExerciseInput(machineId, editExerciseId = null, targetSessionId = null) {
+
+// ========================================
+// マシン記録下書き＆マルチタスク管理
+// ========================================
+window.currentExerciseDraft = null;
+
+function getExerciseFormData() {
+  const container = document.getElementById('sets-container');
+  const cardioContainer = document.getElementById('cardio-inputs');
+  const noteEl = document.getElementById('machine-note');
+  const note = noteEl ? noteEl.value : '';
+
+  if (container) {
+    const rows = container.querySelectorAll('.set-row');
+    const sets = [];
+    rows.forEach(row => {
+      const set = {};
+      row.querySelectorAll('input').forEach(inp => {
+        const val = inp.type === 'number' ? (parseFloat(inp.value) || 0) : inp.value;
+        set[inp.dataset.key] = val;
+      });
+      sets.push(set);
+    });
+    return { type: 'strength', data: sets, note };
+  } else if (cardioContainer) {
+    const data = {};
+    cardioContainer.querySelectorAll('input').forEach(inp => {
+      const key = inp.id.replace('field-', '');
+      data[key] = inp.type === 'number' ? (parseFloat(inp.value) || 0) : inp.value;
+    });
+    return { type: 'cardio', data, note };
+  }
+  return null;
+}
+
+function saveExerciseDraft(machineId, editExerciseId = null, targetSessionId = null) {
+  if (!machineId) {
+    if (window.currentExerciseDraft) machineId = window.currentExerciseDraft.machineId;
+    else return;
+  }
+  const form = getExerciseFormData();
+  if (!form) return;
+
+  window.currentExerciseDraft = {
+    machineId,
+    editExerciseId,
+    targetSessionId,
+    type: form.type,
+    data: form.data,
+    note: form.note,
+    timestamp: Date.now()
+  };
+  try {
+    localStorage.setItem('gymnery_exercise_draft', JSON.stringify(window.currentExerciseDraft));
+  } catch (e) {}
+  renderActiveExerciseBar();
+}
+
+function clearExerciseDraft() {
+  window.currentExerciseDraft = null;
+  try {
+    localStorage.removeItem('gymnery_exercise_draft');
+  } catch (e) {}
+  renderActiveExerciseBar();
+}
+
+function minimizeExerciseInput() {
+  const modal = document.querySelector('.modal-overlay');
+  if (modal && modal.dataset.isExercise === 'true') {
+    const machineId = modal.dataset.machineId;
+    const editExerciseId = modal.dataset.editExerciseId && modal.dataset.editExerciseId !== 'null' ? Number(modal.dataset.editExerciseId) : null;
+    const targetSessionId = modal.dataset.targetSessionId && modal.dataset.targetSessionId !== 'null' ? Number(modal.dataset.targetSessionId) : null;
+    saveExerciseDraft(machineId, editExerciseId, targetSessionId);
+    closeModal(true);
+    showToast('記録中の状態を保持しました（下部バーから再開可能）', 'info');
+  } else {
+    closeModal();
+  }
+}
+
+function discardExerciseDraft() {
+  if (confirm('記録中の内容を破棄しますか？')) {
+    clearExerciseDraft();
+    showToast('下書きを破棄しました', 'info');
+  }
+}
+
+function renderActiveExerciseBar() {
+  let bar = document.getElementById('active-exercise-floating-bar');
+  
+  // モーダルが開いている時はフローティングバーは非表示
+  if (document.querySelector('.modal-overlay')) {
+    if (bar && typeof bar.remove === 'function') bar.remove();
+    return;
+  }
+
+  // 下書きのロード（未初期化ならlocalStorageから）
+  if (!window.currentExerciseDraft) {
+    try {
+      const saved = localStorage.getItem('gymnery_exercise_draft');
+      if (saved) window.currentExerciseDraft = JSON.parse(saved);
+    } catch (e) {}
+  }
+
+  if (!window.currentExerciseDraft) {
+    if (bar && typeof bar.remove === 'function') bar.remove();
+    return;
+  }
+
+  const draft = window.currentExerciseDraft;
+  const machine = getMachineById(draft.machineId);
+  if (!machine) {
+    if (bar && typeof bar.remove === 'function') bar.remove();
+    return;
+  }
+
+  let subText = '';
+  if (draft.type === 'strength' && Array.isArray(draft.data)) {
+    subText = `${draft.data.length}セット入力中 • タップして再開`;
+  } else {
+    subText = '入力中 • タップして再開';
+  }
+
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'active-exercise-floating-bar';
+    bar.className = 'active-exercise-floating-bar';
+    document.body.appendChild(bar);
+  }
+
+  bar.innerHTML = `
+    <div class="floating-bar-info" onclick="openExerciseInput('${draft.machineId}', ${draft.editExerciseId ? draft.editExerciseId : 'null'}, ${draft.targetSessionId ? draft.targetSessionId : 'null'}, true)">
+      <div class="floating-bar-icon">${getCategoryIcon(machine.category)}</div>
+      <div class="floating-bar-text">
+        <div class="floating-bar-title">
+          <span>${machine.name}</span>
+          <span class="badge" style="background:var(--accent)22; color:var(--accent); font-size:0.65rem; padding:1px 5px;">記録中</span>
+        </div>
+        <div class="floating-bar-sub">${subText}</div>
+      </div>
+    </div>
+    <div class="floating-bar-actions">
+      <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); discardExerciseDraft()" style="color:var(--text-muted); font-size:0.85rem; padding:4px 8px;" title="下書きを破棄">✕</button>
+    </div>
+  `;
+}
+
+async function openExerciseInput(machineId, editExerciseId = null, targetSessionId = null, isRestore = false) {
   const machine = getMachineById(machineId);
-  closeModal();
-  await new Promise(r => setTimeout(r, 300));
+  closeModal(true);
+  await new Promise(r => setTimeout(r, 150));
 
   let lastData = null;
   let lastNote = '';
@@ -1239,14 +1395,29 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     resolvedSessionId = activeSessionId;
   }
 
-  if (editExerciseId) {
+  // 下書きがある場合は下書きデータを最優先で復元
+  if (!window.currentExerciseDraft) {
+    try {
+      const saved = localStorage.getItem('gymnery_exercise_draft');
+      if (saved) window.currentExerciseDraft = JSON.parse(saved);
+    } catch (e) {}
+  }
+
+  const draft = window.currentExerciseDraft;
+  const hasMatchingDraft = draft && draft.machineId === machineId && (editExerciseId ? draft.editExerciseId === editExerciseId : !draft.editExerciseId);
+
+  if (hasMatchingDraft && (isRestore || draft.data)) {
+    lastData = draft.data;
+    lastNote = draft.note || '';
+    if (draft.targetSessionId) resolvedSessionId = draft.targetSessionId;
+  } else if (editExerciseId) {
     const db = new Dexie('TrainingRoomApp');
     db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
     const ex = await db.exercises.get(editExerciseId);
     if (ex) {
       lastData = ex.data;
       lastNote = ex.note || '';
-      resolvedSessionId = ex.sessionId; // 編集時はレコードの sessionId を使用
+      resolvedSessionId = ex.sessionId;
     }
   } else {
     const setting = await getMachineSetting(machineId);
@@ -1263,27 +1434,31 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
   }
 
   let timerHeaderHtml = '';
-  // 進行中のアクティブセッションかつ、今回の編集/追加セッションと一致する場合のみタイマーを表示
   if (activeSessionId && activeSessionId === resolvedSessionId) {
     timerHeaderHtml = `
-      <div id="modal-timer-header" class="text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:12px; margin-bottom:12px; font-size:1.3rem; font-weight:800; border: 2px solid var(--accent-glow);">
+      <div id="modal-timer-header" class="text-center" style="color:var(--accent); background:var(--bg-elevated); border-radius:var(--radius-sm); padding:10px; margin-bottom:12px; font-size:1.2rem; font-weight:800; border: 2px solid var(--accent-glow);">
         終了まで: <span id="modal-timer-display" style="font-variant-numeric: tabular-nums;">--:--</span>
       </div>`;
   }
 
   const badgesHtml = await getPastThreeGrowthBadgesHtml(machineId);
 
-  let html = `<div class="modal-handle"></div>
+  let html = `
+    <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:8px;">
+      <button class="btn btn-ghost btn-sm" onclick="minimizeExerciseInput()" style="color:var(--accent); font-size:0.8rem; padding:4px 8px; font-weight:bold;">▼ 最小化 (他画面を見る)</button>
+      <div class="modal-handle" style="margin:0;"></div>
+      <button class="btn btn-ghost btn-sm" onclick="discardExerciseDraft();closeModal();" style="color:var(--text-muted); font-size:0.75rem; padding:4px 6px;">破棄</button>
+    </div>
     ${timerHeaderHtml}
-    <div class="modal-title" style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 24px;">
-      <div>${getCategoryIcon(machine.category)} ${machine.name}</div>
+    <div class="modal-title" style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 20px;">
+      <div style="font-size:1.15rem; font-weight:bold;">${getCategoryIcon(machine.category)} ${machine.name}</div>
       ${badgesHtml}
     </div>`;
 
   if (machine.type === 'strength' && machine.hasSets) {
     let defaultSets = lastData && Array.isArray(lastData) ? lastData : [{}];
-    // 新規作成時（editExerciseId が無い場合）は1セットのみ表示にする
-    if (!editExerciseId && defaultSets.length > 0) {
+    // 新規作成で下書きでもない場合のみ1セット
+    if (!editExerciseId && !hasMatchingDraft && defaultSets.length > 0) {
       defaultSets = [defaultSets[0]];
     }
     html += `<div id="sets-container">`;
@@ -1292,18 +1467,18 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     });
     html += `</div>
       <div class="flex items-center gap-md mt-sm w-full">
-        <button class="btn btn-secondary flex items-center justify-center" onclick="addSetRow('${machineId}')" style="width:40px; height:40px; border-radius:50%; padding:0; font-size:1.5rem; flex-shrink:0;">＋</button>
-        <button class="btn btn-secondary flex items-center justify-center" onclick="startIntervalTimer('${machineId}')" style="border-radius:20px; padding:0 20px; height:40px; font-weight:bold; flex-grow:1;">＋ インターバル</button>
+        <button class="btn btn-secondary flex items-center justify-center" onclick="addSetRow('${machineId}')" style="width:42px; height:42px; border-radius:50%; padding:0; font-size:1.6rem; flex-shrink:0;">＋</button>
+        <button class="btn btn-interval-highlight flex items-center justify-center" onclick="startIntervalTimer('${machineId}')" style="padding:0 20px; height:42px; font-size:0.95rem; flex-grow:1;">⏱️ ＋ インターバル</button>
       </div>
-      <div id="interval-timer-container" class="card mt-md" style="display:none; align-items:center; justify-content:space-between; padding:12px 20px;">
+      <div id="interval-timer-container" class="card mt-md" style="display:none; align-items:center; justify-content:space-between; padding:12px 20px; border: 1.5px solid #ff6b6b;">
         <div id="interval-display" class="timer-safe" style="font-size:2.2rem; font-weight:800; font-variant-numeric: tabular-nums; line-height:1;">01:00</div>
-        <button class="btn btn-secondary btn-sm" onclick="addOneMinuteToInterval()" style="padding:6px 12px; border-radius:var(--radius-sm); font-weight:bold;">＋1分</button>
+        <button class="btn btn-interval-highlight btn-sm" onclick="addOneMinuteToInterval()" style="padding:8px 14px; border-radius:var(--radius-sm); font-weight:bold;">＋1分</button>
       </div>`;
   } else {
     // Cardio
     html += `<div id="cardio-inputs">`;
     for (const f of machine.fields) {
-      const val = lastData ? (lastData[f.key] || '') : '';
+      const val = lastData ? (lastData[f.key] !== undefined ? lastData[f.key] : '') : '';
       html += `
         <div class="input-group">
           <label class="input-label">${f.label}</label>
@@ -1317,7 +1492,9 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     html += `</div>`;
   }
 
-  if (lastData && !editExerciseId) {
+  if (hasMatchingDraft) {
+    html += `<div class="text-xs text-muted mt-sm" style="color:var(--accent);">📝 入力中の下書きを復元しました</div>`;
+  } else if (lastData && !editExerciseId) {
     html += `<div class="text-xs text-muted mt-sm">💡 前回の記録を反映しています</div>`;
   }
 
@@ -1330,27 +1507,27 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
   if (editExerciseId) {
     html += `
       <div class="flex gap-sm mt-lg">
-        <button class="btn btn-secondary" onclick="closeModal();showSessionDetail(${resolvedSessionId})" style="flex:1">戻る</button>
+        <button class="btn btn-secondary" onclick="minimizeExerciseInput();showSessionDetail(${resolvedSessionId})" style="flex:1">戻る (保持)</button>
         <button class="btn btn-primary" onclick="saveExercise('${machineId}', ${editExerciseId}, 'update')" style="flex:1">更新</button>
       </div>`;
   } else if (targetSessionId) {
     // 過去セッションへの新規追加モード
     html += `
       <div class="flex gap-sm mt-lg">
-        <button class="btn btn-secondary" onclick="showPastSessionMachineSelect(${targetSessionId})" style="flex:1">戻る</button>
+        <button class="btn btn-secondary" onclick="minimizeExerciseInput();showPastSessionMachineSelect(${targetSessionId})" style="flex:1">戻る (保持)</button>
         <button class="btn btn-primary" onclick="saveExercise('${machineId}', null, 'ok', ${targetSessionId})" style="flex:1">保存</button>
       </div>`;
   } else {
     // 通常の進行中セッション追加モード
     html += `
       <div class="flex gap-sm mt-lg flex-wrap">
-        <button class="btn btn-secondary" onclick="closeModal();showMachineSelect()" style="flex:1; min-width: 80px;">戻る</button>
+        <button class="btn btn-secondary" onclick="minimizeExerciseInput();showMachineSelect()" style="flex:1; min-width: 80px;">戻る (保持)</button>
         <button class="btn btn-secondary" onclick="saveExercise('${machineId}', null, 'again')" style="flex:1; min-width: 80px; background:var(--bg-card-hover);">再度(維持)</button>
         <button class="btn btn-primary" onclick="saveExercise('${machineId}', null, 'ok')" style="flex:1; min-width: 80px;">OK(次回UP)</button>
       </div>`;
   }
 
-  showModal(html);
+  showModal(html, true, machineId, editExerciseId, targetSessionId);
 }
 
 function renderSetRow(machine, index, data = {}) {
@@ -1618,25 +1795,41 @@ function addOneMinuteToInterval() {
 // ========================================
 // モーダル管理
 // ========================================
-function showModal(contentHtml) {
+function showModal(contentHtml, isExercise = false, machineId = null, editExerciseId = null, targetSessionId = null) {
   const existing = document.querySelector('.modal-overlay');
   if (existing) existing.remove();
 
   const overlay = document.createElement('div');
   overlay.className = 'modal-overlay';
+  if (isExercise) {
+    overlay.dataset.isExercise = 'true';
+    if (machineId) overlay.dataset.machineId = machineId;
+    if (editExerciseId) overlay.dataset.editExerciseId = String(editExerciseId);
+    if (targetSessionId) overlay.dataset.targetSessionId = String(targetSessionId);
+  }
   overlay.innerHTML = `<div class="modal">${contentHtml}</div>`;
   overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeModal();
+    if (e.target === overlay) {
+      if (isExercise) {
+        minimizeExerciseInput();
+      } else {
+        closeModal();
+      }
+    }
   });
   document.body.appendChild(overlay);
+  renderActiveExerciseBar();
 }
 
-function closeModal() {
+function closeModal(skipDraftClear = false) {
   clearLocalIntervalTimer();
 
   const overlay = document.querySelector('.modal-overlay');
   if (overlay) overlay.remove();
+
+  renderActiveExerciseBar();
 }
+
 
 // ========================================
 // セッション詳細
@@ -3373,7 +3566,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v80)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v81)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>

@@ -1267,6 +1267,109 @@ textarea.input {
   margin-bottom: var(--space-lg);
 }
 
+/* --- Active Exercise Floating Bar (Multitask / Draft) --- */
+.active-exercise-floating-bar {
+  position: fixed;
+  bottom: calc(var(--nav-height) + 10px);
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 24px);
+  max-width: var(--max-width);
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius-lg);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.45), 0 0 12px rgba(78, 205, 196, 0.25);
+  z-index: 150;
+  cursor: pointer;
+  animation: slideUpFloat 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.active-exercise-floating-bar:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+@keyframes slideUpFloat {
+  from { transform: translateX(-50%) translateY(30px); opacity: 0; }
+  to { transform: translateX(-50%) translateY(0); opacity: 1; }
+}
+
+.floating-bar-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.floating-bar-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: rgba(78, 205, 196, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  animation: pulseIcon 2s infinite ease-in-out;
+}
+
+@keyframes pulseIcon {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+.floating-bar-text {
+  min-width: 0;
+}
+
+.floating-bar-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.floating-bar-sub {
+  font-size: 0.7rem;
+  color: var(--accent);
+  font-weight: 600;
+  margin-top: 1px;
+}
+
+.floating-bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* --- Interval Highlight Button --- */
+.btn-interval-highlight {
+  background: linear-gradient(135deg, #ff6b6b 0%, #ee5253 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  font-weight: 800 !important;
+  border-radius: 20px !important;
+  box-shadow: 0 4px 14px rgba(238, 82, 83, 0.35) !important;
+  transition: transform 0.15s ease, box-shadow 0.15s ease !important;
+}
+
+.btn-interval-highlight:active {
+  transform: scale(0.96) !important;
+  box-shadow: 0 2px 6px rgba(238, 82, 83, 0.2) !important;
+}
+
+
 /* --- Confirm dialog --- */
 .confirm-dialog {
   align-items: center;
