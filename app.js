@@ -2554,14 +2554,16 @@ async function renderStats(main) {
       <!-- Muscle Recovery Map -->
       <div class="card mb-md">
         <div class="text-sm font-bold mb-md">🧍 筋肉リカバリーマップ</div>
-        <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative; height:240px;">
+        <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative;">
           <!-- SVG is dynamically generated below -->
         </div>
-        <div class="flex justify-center gap-md mt-sm text-xs">
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>当日/未回復</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復完了</span>
+        <div class="flex justify-center gap-md mt-sm text-xs" style="flex-wrap:wrap;">
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>当日</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中(1-2日)</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復済(3日+)</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#374151; border-radius:50%;"></span>未実施</span>
         </div>
+        <div id="muscle-detail-list" style="margin-top:12px;"></div>
       </div>
       <div class="stats-grid">
         <div class="stat-card">
@@ -4336,75 +4338,291 @@ window.resetFacilityInfo = function() {
 
 async function renderMuscleMap() {
   const container = document.getElementById('muscle-map-container');
+  const detailList = document.getElementById('muscle-detail-list');
   if (!container) return;
-  
+
   let exercises = [];
   try {
     exercises = await getAllExercises();
   } catch (e) {
     console.error(e);
   }
-  
-  const cats = ['upper', 'lower', 'core', 'arm'];
-  const recoveryMap = {};
-  
+
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  
-  for (const c of cats) {
-    const machines = window.GymneryFacility.machines.filter(m => m.category === c);
-    const machineIds = new Set(machines.map(m => m.id));
-    
-    const catExercises = exercises.filter(e => machineIds.has(e.machineId));
-    let minDays = 999;
-    
-    if (catExercises.length > 0) {
+
+  // Muscle groups with machine mappings
+  // Each muscle maps to one or more machineIds
+  const muscleGroups = [
+    { id: 'pectoralis', name: '大胸筋', machines: ['chest_press','fly','assisted_dips'], side: 'front', category: 'upper' },
+    { id: 'deltoid', name: '三角筋', machines: ['shoulder_press','chest_press'], side: 'both', category: 'upper' },
+    { id: 'trapezius', name: '僧帽筋', machines: ['lat_pulldown','assisted_chinning'], side: 'both', category: 'upper' },
+    { id: 'latissimus', name: '広背筋', machines: ['lat_pulldown','assisted_chinning'], side: 'back', category: 'upper' },
+    { id: 'biceps', name: '上腕二頭筋', machines: ['arm_curl','lat_pulldown','assisted_chinning'], side: 'front', category: 'arm' },
+    { id: 'triceps', name: '上腕三頭筋', machines: ['arm_extension','chest_press','assisted_dips','shoulder_press'], side: 'back', category: 'arm' },
+    { id: 'rectus_abdominis', name: '腹直筋', machines: ['abdominal','knee_raise'], side: 'front', category: 'core' },
+    { id: 'obliques', name: '腹斜筋', machines: ['rotary_torso'], side: 'front', category: 'core' },
+    { id: 'erector_spinae', name: '脊柱起立筋', machines: ['back_extension'], side: 'back', category: 'core' },
+    { id: 'quadriceps', name: '大腿四頭筋', machines: ['leg_extension','leg_press'], side: 'front', category: 'lower' },
+    { id: 'hamstrings', name: 'ハムストリングス', machines: ['leg_curl','leg_press'], side: 'back', category: 'lower' },
+    { id: 'glutes', name: '大臀筋', machines: ['glute','abduction','leg_press'], side: 'back', category: 'lower' },
+    { id: 'adductors', name: '内転筋群', machines: ['adduction'], side: 'front', category: 'lower' },
+    { id: 'calves', name: '下腿三頭筋', machines: ['calf_raise'], side: 'back', category: 'lower' },
+  ];
+
+  // Calculate recovery days for each muscle group
+  const muscleRecovery = {};
+  for (const mg of muscleGroups) {
+    const machineIds = new Set(mg.machines);
+    const mgExercises = exercises.filter(e => machineIds.has(e.machineId));
+    let diffDays = -1; // -1 means never trained
+
+    if (mgExercises.length > 0) {
       let maxTime = 0;
-      for (const e of catExercises) {
-        if (e.createdAt > maxTime) maxTime = e.createdAt;
+      for (const e of mgExercises) {
+        const t = typeof e.createdAt === 'string' ? new Date(e.createdAt).getTime() : e.createdAt;
+        if (t > maxTime) maxTime = t;
       }
       const lastDate = new Date(maxTime);
       const lastDay = new Date(lastDate.getFullYear(), lastDate.getMonth(), lastDate.getDate());
-      const diffTime = today.getTime() - lastDay.getTime();
-      const diffDays = Math.floor(diffTime / (1000 * 3600 * 24));
-      
-      if (diffDays >= 0 && diffDays < minDays) {
-        minDays = diffDays;
-      }
+      diffDays = Math.floor((today.getTime() - lastDay.getTime()) / (1000 * 3600 * 24));
     }
-    
-    let color = '#374151'; // default dark gray
-    if (minDays === 0) color = '#ef4444'; // red
-    else if (minDays === 1 || minDays === 2) color = '#f59e0b'; // yellow
-    else if (minDays >= 3 || minDays === 999) color = '#10b981'; // green
-    
-    recoveryMap[c] = color;
+
+    let color = '#374151'; // never trained - dark gray
+    let status = '未実施';
+    if (diffDays === 0) { color = '#ef4444'; status = '当日'; }
+    else if (diffDays === 1) { color = '#f97316'; status = '1日前'; }
+    else if (diffDays === 2) { color = '#f59e0b'; status = '2日前'; }
+    else if (diffDays >= 3 && diffDays < 999) { color = '#10b981'; status = diffDays + '日前'; }
+
+    muscleRecovery[mg.id] = { color, diffDays, status, name: mg.name, machines: mg.machines, category: mg.category, side: mg.side };
   }
-  
-  // Very simplified human body representation
+
+  const gc = (id) => muscleRecovery[id] ? muscleRecovery[id].color : '#374151';
+
+  // =============================================
+  // Detailed SVG front + back view
+  // viewBox: front body 0-200, back body 220-420
+  // =============================================
   const svgHtml = `
-    <svg viewBox="0 0 100 200" width="120" height="240">
-      <!-- Head -->
-      <circle cx="50" cy="20" r="15" fill="#374151" />
-      
-      <!-- Upper Body (Chest/Back/Shoulders) -->
-      <path d="M 30 40 Q 50 35 70 40 L 75 75 Q 50 85 25 75 Z" fill="${recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
-      
-      <!-- Core (Abs/Lower back) -->
-      <path d="M 32 75 Q 50 85 68 75 L 65 110 Q 50 115 35 110 Z" fill="${recoveryMap['core']}" stroke="#1f2937" stroke-width="2" />
-      
-      <!-- Arms -->
-      <!-- Left Arm -->
-      <path d="M 30 40 Q 20 50 15 80 L 25 80 Q 25 60 35 45 Z" fill="${recoveryMap['arm'] || recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
-      <!-- Right Arm -->
-      <path d="M 70 40 Q 80 50 85 80 L 75 80 Q 75 60 65 45 Z" fill="${recoveryMap['arm'] || recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
-      
-      <!-- Lower Body (Legs) -->
-      <!-- Left Leg -->
-      <path d="M 35 110 Q 30 150 25 190 L 40 190 Q 45 150 48 115 Z" fill="${recoveryMap['lower']}" stroke="#1f2937" stroke-width="2" />
-      <!-- Right Leg -->
-      <path d="M 65 110 Q 70 150 75 190 L 60 190 Q 55 150 52 115 Z" fill="${recoveryMap['lower']}" stroke="#1f2937" stroke-width="2" />
+    <svg viewBox="0 0 440 520" width="100%" style="max-width:380px;" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <style>
+          .muscle-path { stroke: #1f293766; stroke-width: 0.8; cursor: pointer; transition: opacity 0.2s; }
+          .muscle-path:hover { opacity: 0.75; stroke: #fff; stroke-width: 1.5; }
+          .body-outline { fill: none; stroke: #4b5563; stroke-width: 1; }
+          .label-text { font-size: 7.5px; fill: #d1d5db; font-family: sans-serif; }
+          .side-label { font-size: 10px; fill: #9ca3af; font-family: sans-serif; font-weight: bold; text-anchor: middle; }
+        </style>
+      </defs>
+
+      <!-- Side labels -->
+      <text x="100" y="16" class="side-label">前面</text>
+      <text x="320" y="16" class="side-label">背面</text>
+
+      <!-- ==================== FRONT VIEW ==================== -->
+      <g transform="translate(10, 25)">
+        <!-- Head -->
+        <ellipse cx="90" cy="18" rx="18" ry="22" fill="#2d3748" stroke="#4b5563" stroke-width="0.8"/>
+
+        <!-- Neck / 胸鎖乳突筋 -->
+        <rect x="82" y="38" width="16" height="18" rx="4" fill="#2d3748" stroke="#4b5563" stroke-width="0.5"/>
+
+        <!-- Trapezius front / 僧帽筋 -->
+        <path d="M 72 42 Q 66 46 56 52 L 62 58 Q 72 52 78 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+        <path d="M 108 42 Q 114 46 124 52 L 118 58 Q 108 52 102 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+
+        <!-- Deltoid front / 三角筋 -->
+        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+
+        <!-- Pectoralis / 大胸筋 -->
+        <path d="M 62 58 Q 78 54 90 58 L 90 88 Q 78 92 68 86 L 62 74 Z" class="muscle-path" fill="${gc('pectoralis')}" />
+        <path d="M 118 58 Q 102 54 90 58 L 90 88 Q 102 92 112 86 L 118 74 Z" class="muscle-path" fill="${gc('pectoralis')}" />
+
+        <!-- Biceps / 上腕二頭筋 -->
+        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" fill="${gc('biceps')}" />
+        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" fill="${gc('biceps')}" />
+
+        <!-- Forearm -->
+        <path d="M 36 112 Q 30 134 26 156 L 36 158 Q 38 136 46 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <path d="M 144 112 Q 150 134 154 156 L 144 158 Q 142 136 134 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Rectus Abdominis / 腹直筋 -->
+        <path d="M 78 88 L 78 96 L 90 98 L 90 88 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 88 L 90 98 L 102 96 L 102 88 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 78 96 L 78 106 L 90 108 L 90 98 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 98 L 90 108 L 102 106 L 102 96 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 78 106 L 78 116 L 90 118 L 90 108 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 108 L 90 118 L 102 116 L 102 106 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+
+        <!-- Obliques / 腹斜筋 -->
+        <path d="M 68 86 Q 72 98 74 118 L 78 118 L 78 88 Q 74 90 68 86 Z" class="muscle-path" fill="${gc('obliques')}" />
+        <path d="M 112 86 Q 108 98 106 118 L 102 118 L 102 88 Q 106 90 112 86 Z" class="muscle-path" fill="${gc('obliques')}" />
+
+        <!-- Adductors / 内転筋群 -->
+        <path d="M 82 122 Q 84 158 86 186 L 90 186 L 90 122 Z" class="muscle-path" fill="${gc('adductors')}" />
+        <path d="M 98 122 Q 96 158 94 186 L 90 186 L 90 122 Z" class="muscle-path" fill="${gc('adductors')}" />
+
+        <!-- Quadriceps / 大腿四頭筋 -->
+        <path d="M 74 118 Q 68 152 62 194 L 78 194 Q 82 158 82 122 L 78 118 Z" class="muscle-path" fill="${gc('quadriceps')}" />
+        <path d="M 106 118 Q 112 152 118 194 L 102 194 Q 98 158 98 122 L 102 118 Z" class="muscle-path" fill="${gc('quadriceps')}" />
+
+        <!-- Tibialis / shin -->
+        <path d="M 62 194 Q 58 230 56 270 L 68 270 Q 70 234 74 200 L 78 194 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <path d="M 118 194 Q 122 230 124 270 L 112 270 Q 110 234 106 200 L 102 194 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Knees -->
+        <ellipse cx="70" cy="198" rx="10" ry="6" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <ellipse cx="110" cy="198" rx="10" ry="6" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Feet -->
+        <ellipse cx="62" cy="275" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <ellipse cx="118" cy="275" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Front labels -->
+        <text x="16" y="60" class="label-text" text-anchor="end">三角筋</text>
+        <line x1="18" y1="58" x2="44" y2="64" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="16" y="74" class="label-text" text-anchor="end">大胸筋</text>
+        <line x1="18" y1="72" x2="64" y2="72" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="16" y="100" class="label-text" text-anchor="end">上腕二頭筋</text>
+        <line x1="18" y1="98" x2="42" y2="98" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="16" y="115" class="label-text" text-anchor="end">腹斜筋</text>
+        <line x1="18" y1="113" x2="70" y2="105" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="100" class="label-text">腹直筋</text>
+        <line x1="162" y1="98" x2="102" y2="102" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="48" class="label-text">僧帽筋</text>
+        <line x1="162" y1="46" x2="118" y2="46" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="16" y="152" class="label-text" text-anchor="end">内転筋群</text>
+        <line x1="18" y1="150" x2="84" y2="148" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="160" class="label-text">大腿四頭筋</text>
+        <line x1="162" y1="158" x2="114" y2="160" stroke="#6b7280" stroke-width="0.5"/>
+      </g>
+
+      <!-- ==================== BACK VIEW ==================== -->
+      <g transform="translate(230, 25)">
+        <!-- Head -->
+        <ellipse cx="90" cy="18" rx="18" ry="22" fill="#2d3748" stroke="#4b5563" stroke-width="0.8"/>
+
+        <!-- Neck -->
+        <rect x="82" y="38" width="16" height="18" rx="4" fill="#2d3748" stroke="#4b5563" stroke-width="0.5"/>
+
+        <!-- Trapezius back / 僧帽筋 -->
+        <path d="M 78 42 Q 84 50 90 60 Q 96 50 102 42 L 90 36 Z" class="muscle-path" fill="${gc('trapezius')}" />
+        <path d="M 72 42 Q 66 46 56 52 L 62 58 L 78 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+        <path d="M 108 42 Q 114 46 124 52 L 118 58 L 102 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+
+        <!-- Deltoid back / 三角筋 -->
+        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+
+        <!-- Latissimus Dorsi / 広背筋 -->
+        <path d="M 62 58 Q 72 56 80 60 L 78 92 Q 70 96 64 88 L 60 72 Z" class="muscle-path" fill="${gc('latissimus')}" />
+        <path d="M 118 58 Q 108 56 100 60 L 102 92 Q 110 96 116 88 L 120 72 Z" class="muscle-path" fill="${gc('latissimus')}" />
+
+        <!-- Erector Spinae / 脊柱起立筋 -->
+        <path d="M 84 60 L 84 118 L 90 120 L 90 60 Z" class="muscle-path" fill="${gc('erector_spinae')}" />
+        <path d="M 96 60 L 96 118 L 90 120 L 90 60 Z" class="muscle-path" fill="${gc('erector_spinae')}" />
+
+        <!-- Triceps / 上腕三頭筋 -->
+        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" fill="${gc('triceps')}" />
+        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" fill="${gc('triceps')}" />
+
+        <!-- Forearm back -->
+        <path d="M 36 112 Q 30 134 26 156 L 36 158 Q 38 136 46 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <path d="M 144 112 Q 150 134 154 156 L 144 158 Q 142 136 134 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Lower back side fill -->
+        <path d="M 64 88 Q 68 102 74 118 L 78 118 L 78 92 Q 70 96 64 88 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.3" />
+        <path d="M 116 88 Q 112 102 106 118 L 102 118 L 102 92 Q 110 96 116 88 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.3" />
+
+        <!-- Glutes / 大臀筋 -->
+        <path d="M 74 118 Q 72 128 72 140 Q 80 146 90 142 L 90 120 Q 84 122 78 120 Z" class="muscle-path" fill="${gc('glutes')}" />
+        <path d="M 106 118 Q 108 128 108 140 Q 100 146 90 142 L 90 120 Q 96 122 102 120 Z" class="muscle-path" fill="${gc('glutes')}" />
+
+        <!-- Hamstrings / ハムストリングス -->
+        <path d="M 72 140 Q 66 170 62 200 L 78 200 Q 82 166 86 146 Q 80 146 72 140 Z" class="muscle-path" fill="${gc('hamstrings')}" />
+        <path d="M 108 140 Q 114 170 118 200 L 102 200 Q 98 166 94 146 Q 100 146 108 140 Z" class="muscle-path" fill="${gc('hamstrings')}" />
+
+        <!-- Calves / 下腿三頭筋 -->
+        <path d="M 62 204 Q 58 224 56 240 Q 60 250 68 254 Q 74 240 76 224 L 78 204 Z" class="muscle-path" fill="${gc('calves')}" />
+        <path d="M 118 204 Q 122 224 124 240 Q 120 250 112 254 Q 106 240 104 224 L 102 204 Z" class="muscle-path" fill="${gc('calves')}" />
+
+        <!-- Lower legs -->
+        <path d="M 56 240 Q 56 260 56 270 L 68 270 Q 68 260 68 254 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <path d="M 124 240 Q 124 260 124 270 L 112 270 Q 112 260 112 254 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Knees back -->
+        <ellipse cx="70" cy="202" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <ellipse cx="110" cy="202" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Feet back -->
+        <ellipse cx="62" cy="275" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+        <ellipse cx="118" cy="275" rx="10" ry="5" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
+
+        <!-- Back labels -->
+        <text x="164" y="48" class="label-text">僧帽筋</text>
+        <line x1="162" y1="46" x2="108" y2="44" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="64" class="label-text">三角筋</text>
+        <line x1="162" y1="62" x2="132" y2="66" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="80" class="label-text">広背筋</text>
+        <line x1="162" y1="78" x2="118" y2="76" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="96" class="label-text">上腕三頭筋</text>
+        <line x1="162" y1="94" x2="138" y2="98" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="16" y="80" class="label-text" text-anchor="end">脊柱起立筋</text>
+        <line x1="18" y1="78" x2="84" y2="80" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="134" class="label-text">大臀筋</text>
+        <line x1="162" y1="132" x2="108" y2="134" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="170" class="label-text">ハムストリングス</text>
+        <line x1="162" y1="168" x2="116" y2="170" stroke="#6b7280" stroke-width="0.5"/>
+        <text x="164" y="238" class="label-text">下腿三頭筋</text>
+        <line x1="162" y1="236" x2="122" y2="236" stroke="#6b7280" stroke-width="0.5"/>
+      </g>
     </svg>
   `;
   container.innerHTML = svgHtml;
+
+  // === Build detail list ===
+  if (!detailList) return;
+
+  const categoryLabels = { upper: '上半身', lower: '下半身', core: '体幹', arm: '腕' };
+  const categoryIcons = { upper: '💪', lower: '🦵', core: '🧘', arm: '🤜' };
+  const grouped = {};
+  for (const mg of muscleGroups) {
+    if (!grouped[mg.category]) grouped[mg.category] = [];
+    const r = muscleRecovery[mg.id];
+    const machineNames = mg.machines.map(mid => {
+      const m = getMachineById(mid);
+      return m ? m.name : mid;
+    }).filter(Boolean);
+    grouped[mg.category].push({
+      name: mg.name,
+      status: r.status,
+      color: r.color,
+      diffDays: r.diffDays,
+      machineNames
+    });
+  }
+
+  let listHtml = '';
+  for (const cat of ['upper','core','arm','lower']) {
+    if (!grouped[cat]) continue;
+    listHtml += '<div style="margin-bottom:10px;">';
+    listHtml += '<div style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:4px;">' + (categoryIcons[cat]||'') + ' ' + (categoryLabels[cat]||cat) + '</div>';
+    for (const item of grouped[cat]) {
+      const dotStyle = 'display:inline-block; width:8px; height:8px; border-radius:50%; background:' + item.color + '; margin-right:6px; flex-shrink:0;';
+      const statusStyle = 'font-size:0.7rem; padding:1px 6px; border-radius:8px; background:' + item.color + '22; color:' + item.color + '; font-weight:bold; white-space:nowrap;';
+      const machinesStr = item.machineNames.join(', ');
+      listHtml += '<div style="display:flex; align-items:center; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border-color); gap:6px;">';
+      listHtml += '  <div style="display:flex; align-items:center; min-width:0;">';
+      listHtml += '    <span style="' + dotStyle + '"></span>';
+      listHtml += '    <span style="font-size:0.8rem; font-weight:600; white-space:nowrap;">' + item.name + '</span>';
+      listHtml += '    <span style="font-size:0.65rem; color:var(--text-secondary); margin-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + machinesStr + '</span>';
+      listHtml += '  </div>';
+      listHtml += '  <span style="' + statusStyle + '">' + item.status + '</span>';
+      listHtml += '</div>';
+    }
+    listHtml += '</div>';
+  }
+  detailList.innerHTML = listHtml;
 }
