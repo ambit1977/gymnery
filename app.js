@@ -459,9 +459,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Initialize default member ID C-41 if not present
+  // Initialize default member ID C- if not present
   if (!localStorage.getItem('member_id')) {
-    localStorage.setItem('member_id', 'C-41');
+    localStorage.setItem('member_id', 'C-');
   }
 
   // Handle body composition URL parameters (Shortcut integration)
@@ -819,24 +819,29 @@ async function renderHome(main) {
     checkedItems = [];
   }
 
-  const checklistItems = [
-    '靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル',
-    '替靴下', '替下着', '替シャツ', '替ズボン', '洗面用具類',
-    'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋',
-    'プロテイン飲む', 'ティッシュ / ウェットティッシュ'
-  ];
+  let checklistItems = JSON.parse(localStorage.getItem('custom_checklist') || 'null');
+  if (!checklistItems) {
+    // 既存ユーザー（状態が保存されている）かどうか
+    const hasStates = localStorage.getItem('checklist_states');
+    if (hasStates) {
+      checklistItems = ['靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル', '替靴下', '替下着', '替シャツ', '替ズボン', '洗面用具類', 'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋', 'プロテイン飲む', 'ティッシュ / ウェットティッシュ'];
+    } else {
+      checklistItems = ['靴', 'スマホ', 'スマホ充電', 'ワイヤレスイヤホン', 'タオル', '替靴下', '替下着', '替シャツ', '替ズボン', 'スマートウォッチ', '小銭', 'ドリンクボトル', 'ビニール袋', 'プロテイン飲む', 'ティッシュ / ウェットティッシュ'];
+    }
+    localStorage.setItem('custom_checklist', JSON.stringify(checklistItems));
+  }
 
-  const memberId = localStorage.getItem('member_id') || 'C-41';
+  const memberId = localStorage.getItem('member_id') || 'C-';
 
   // 会員証カードHTML
   const memberCardHtml = `
-    <div class="card mb-md" style="background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%); border: 1px solid var(--accent-glow); padding: 16px; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius-md);">
+    <div class="card mb-md" onclick="editMemberId()" style="cursor: pointer; background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%); border: 1px solid var(--accent-glow); padding: 16px; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius-md);" title="タップして会員番号を編集">
       <div>
         <div class="text-xs text-muted" style="letter-spacing: 1px;">MEMBERSHIP CARD</div>
         <div class="text-md font-bold mt-xs" style="color: var(--text-primary); font-size: 1.1rem;">練馬区利用証</div>
       </div>
       <div class="text-right">
-        <div class="text-xs text-muted">会員番号</div>
+        <div class="text-xs text-muted">会員番号 ✏️</div>
         <div class="text-lg font-bold" style="color: var(--accent); font-family: monospace; letter-spacing: 1px; font-size: 1.4rem;">${memberId}</div>
       </div>
     </div>
@@ -859,7 +864,7 @@ async function renderHome(main) {
   const checklistHtml = `
     <div class="card mb-md" style="padding: 0; overflow: hidden; border: 1px solid var(--border-color);">
       <div onclick="toggleChecklistAccordion()" class="flex items-center justify-between" style="padding: 12px 16px; background: var(--bg-secondary); cursor: pointer; user-select: none;">
-        <span class="text-sm font-bold flex items-center gap-xs">🎒 持ち物チェックリスト <span id="checklist-progress-badge" class="badge" style="background: var(--accent-glow); color: var(--accent); font-size: 0.7rem; padding: 2px 6px;">${checkedItems.length}/${checklistItems.length}</span></span>
+        <span class="text-sm font-bold flex items-center gap-xs">🎒 持ち物チェックリスト <span id="checklist-progress-badge" class="badge" style="background: var(--accent-glow); color: var(--accent); font-size: 0.7rem; padding: 2px 6px;">${checkedItems.length}/${checklistItems.length}</span> <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); editChecklist()" style="padding:0; margin-left:4px;" title="編集">✏️</button></span>
         <span id="checklist-arrow" style="transform: ${isChecklistOpen ? 'rotate(90deg)' : 'rotate(0)'}; transition: transform 0.2s;">▶</span>
       </div>
       <div id="checklist-body" style="display: ${isChecklistOpen ? 'block' : 'none'}; padding: 12px 16px; background: var(--bg-card); max-height: 280px; overflow-y: auto;">
@@ -2546,6 +2551,18 @@ async function renderStats(main) {
 
   main.innerHTML = `
     <div class="page">
+      <!-- Muscle Recovery Map -->
+      <div class="card mb-md">
+        <div class="text-sm font-bold mb-md">🧍 筋肉リカバリーマップ</div>
+        <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative; height:240px;">
+          <!-- SVG is dynamically generated below -->
+        </div>
+        <div class="flex justify-center gap-md mt-sm text-xs">
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>当日/未回復</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復完了</span>
+        </div>
+      </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="stat-value">${totalSessions}</div>
@@ -2596,6 +2613,7 @@ async function renderStats(main) {
     </div>`;
 
   // Render charts
+  renderMuscleMap();
   if (strengthMachines.length > 0) renderWeightChart();
   if (topMachines.length > 0) renderUsageChart(topMachines);
 }
@@ -3265,7 +3283,10 @@ function renderSettings(main) {
   main.innerHTML = `
     <div class="page">
       <div class="card mb-md" style="line-height: 1.6;">
-        <div class="text-sm font-bold mb-xs">📍 施設情報</div>
+        <div class="text-sm font-bold mb-xs flex justify-between items-center">
+          <span>📍 施設情報</span>
+          <button class="btn btn-ghost btn-sm" onclick="editFacilityInfo()" style="padding: 2px 6px;">✏️ 編集</button>
+        </div>
         <div class="text-sm font-bold">${FACILITY.name}</div>
         <div class="text-xs text-muted mb-sm">${FACILITY.address} (☎ ${FACILITY.phone})</div>
         
@@ -3296,11 +3317,25 @@ function renderSettings(main) {
         </div>
       </div>
 
+      
+      <!-- Muscle Recovery Map -->
+      <div class="card mb-md">
+        <div class="text-sm font-bold mb-md">🧍 筋肉リカバリーマップ</div>
+        <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative; height:240px;">
+          <!-- SVG is dynamically generated below -->
+        </div>
+        <div class="flex justify-center gap-md mt-sm text-xs">
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>今日/未回復</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中</span>
+          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復済み</span>
+        </div>
+      </div>
+
       <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">🪪 会員番号設定</div>
         <p class="text-xs text-muted mb-md">受付用の会員番号（利用証番号）を登録します。</p>
         <div class="flex gap-sm">
-          <input type="text" class="input text-xs" id="setting-member-id" value="${localStorage.getItem('member_id') || 'C-41'}" placeholder="C-41" style="flex:2;">
+          <input type="text" class="input text-xs" id="setting-member-id" value="${localStorage.getItem('member_id') || 'C-'}" placeholder="C-" style="flex:2;">
           <button class="btn btn-primary btn-sm" onclick="saveSettingMemberId()" style="flex:1;">保存</button>
         </div>
       </div>
@@ -3906,7 +3941,7 @@ function triggerMonthScroll(year, month) {
 }
 
 // ========================================
-// 初回起動ウィざーど (Onboarding Wizard)
+// 初回起動ウィザード (Onboarding Wizard)
 // ========================================
 async function checkOnboardingWizard() {
   let completed = localStorage.getItem('gs_wizard_completed') === '1';
@@ -4018,12 +4053,12 @@ window.nextWizardStep = function(stepNum) {
 
 window.skipWizard = async function() {
   await finishWizard();
-  showToast('ウィざーどをスキップしました', 'info');
+  showToast('ウィザードをスキップしました', 'info');
 };
 
 window.completeWizard = async function() {
   await finishWizard();
-  showToast('ウィざーどを完了しました！トレーニングを始めましょう💪', 'success');
+  showToast('ウィザードを完了しました！トレーニングを始めましょう💪', 'success');
 };
 
 async function finishWizard() {
@@ -4154,3 +4189,199 @@ window.toggleHelpAccordion = function(btn) {
   });
 })();
 
+
+window.editMemberId = function() {
+  const current = localStorage.getItem('member_id') || 'C-';
+  const res = prompt('会員番号を入力してください:', current);
+  if (res !== null) {
+    localStorage.setItem('member_id', res);
+    const main = document.getElementById('main-content');
+    if (main) renderHome(main);
+  }
+};
+
+window.editChecklist = function() {
+  const currentItems = JSON.parse(localStorage.getItem('custom_checklist') || '[]');
+  const text = currentItems.join('\n');
+  const modalHtml = `
+    <div class="modal-overlay active" id="checklist-edit-modal" onclick="closeModalCustom('checklist-edit-modal')">
+      <div class="modal-content" onclick="event.stopPropagation()">
+        <div class="modal-handle"></div>
+        <h3 class="mb-sm">持ち物チェックリストの編集</h3>
+        <p class="text-xs text-muted mb-sm">1行に1つの持ち物を入力してください。</p>
+        <textarea id="checklist-edit-text" class="input mb-md" style="width:100%; height: 200px; resize:none;">${text}</textarea>
+        <div class="flex gap-sm">
+          <button class="btn btn-secondary" style="flex:1" onclick="closeModalCustom('checklist-edit-modal')">キャンセル</button>
+          <button class="btn btn-primary" style="flex:1" onclick="saveChecklist()">保存</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.saveChecklist = function() {
+  const val = document.getElementById('checklist-edit-text').value;
+  const newItems = val.split('\n').map(s => s.trim()).filter(s => s);
+  localStorage.setItem('custom_checklist', JSON.stringify(newItems));
+  closeModalCustom('checklist-edit-modal');
+  showToast('チェックリストを保存しました', 'success');
+  const main = document.getElementById('main-content');
+  if (main) renderHome(main);
+};
+
+window.closeModalCustom = function(id) {
+  const m = document.getElementById(id);
+  if (m) m.remove();
+};
+
+
+window.editFacilityInfo = function() {
+  const fac = window.GymneryFacility || {};
+  const arrayToStr = (arr) => Array.isArray(arr) ? arr.join('\n') : (arr || '');
+  
+  const modalHtml = `
+    <div class="modal-overlay active" id="facility-edit-modal" onclick="closeModalCustom('facility-edit-modal')">
+      <div class="modal-content" onclick="event.stopPropagation()" style="max-height:90vh; overflow-y:auto; padding-bottom: 30px;">
+        <div class="modal-handle"></div>
+        <h3 class="mb-sm">施設情報の編集</h3>
+        <p class="text-xs text-muted mb-md">※ローカルに保存され、設定画面の表示を上書きします。</p>
+        
+        <label class="text-xs font-bold">施設名</label>
+        <input type="text" id="fac-name" class="input mb-sm text-sm" value="${fac.name || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">住所</label>
+        <input type="text" id="fac-address" class="input mb-sm text-sm" value="${fac.address || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">電話番号</label>
+        <input type="text" id="fac-phone" class="input mb-sm text-sm" value="${fac.phone || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold text-primary mt-sm block">🏛️ 区民館 全般</label>
+        
+        <label class="text-xs font-bold">開館時間</label>
+        <input type="text" id="fac-openHours" class="input mb-sm text-sm" value="${fac.openHours || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">受付時間</label>
+        <input type="text" id="fac-receptionHours" class="input mb-sm text-sm" value="${fac.receptionHours || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">休館日</label>
+        <input type="text" id="fac-closedDays" class="input mb-sm text-sm" value="${fac.closedDays || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold text-primary mt-sm block">🏃 トレーニング室 (個人利用)</label>
+        
+        <label class="text-xs font-bold">対象</label>
+        <input type="text" id="fac-gymTarget" class="input mb-sm text-sm" value="${fac.gymTarget || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">利用時間 (入替制) ※改行でリスト化</label>
+        <textarea id="fac-gymHours" class="input mb-sm text-sm" style="width:100%; height:80px; resize:none;">${arrayToStr(fac.gymHours)}</textarea>
+        
+        <label class="text-xs font-bold">使用料 ※改行でリスト化</label>
+        <textarea id="fac-gymFee" class="input mb-sm text-sm" style="width:100%; height:80px; resize:none;">${arrayToStr(fac.gymFee)}</textarea>
+        
+        <label class="text-xs font-bold">持ち物</label>
+        <input type="text" id="fac-gymBelongings" class="input mb-sm text-sm" value="${fac.gymBelongings || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">手続き</label>
+        <input type="text" id="fac-gymProcedure" class="input mb-sm text-sm" value="${fac.gymProcedure || ''}" style="width:100%">
+        
+        <label class="text-xs font-bold">注意事項 ※改行でリスト化</label>
+        <textarea id="fac-gymNotes" class="input mb-md text-sm" style="width:100%; height:100px; resize:none;">${arrayToStr(fac.gymNotes)}</textarea>
+        
+        <div class="flex gap-sm mt-md">
+          <button class="btn btn-secondary" style="flex:1" onclick="closeModalCustom('facility-edit-modal')">キャンセル</button>
+          <button class="btn btn-primary" style="flex:1" onclick="saveFacilityInfo()">保存</button>
+        </div>
+        <div class="mt-md text-center">
+          <button class="btn btn-ghost text-xs" style="color:var(--danger)" onclick="resetFacilityInfo()">デフォルトに戻す</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.saveFacilityInfo = function() {
+  const fac = window.GymneryFacility || {};
+  const strToArray = (str) => str.split('\n').map(s => s.trim()).filter(s => s);
+  
+  const custom = {
+    name: document.getElementById('fac-name').value,
+    address: document.getElementById('fac-address').value,
+    phone: document.getElementById('fac-phone').value,
+    openHours: document.getElementById('fac-openHours').value,
+    receptionHours: document.getElementById('fac-receptionHours').value,
+    closedDays: document.getElementById('fac-closedDays').value,
+    gymTarget: document.getElementById('fac-gymTarget').value,
+    gymHours: strToArray(document.getElementById('fac-gymHours').value),
+    gymFee: strToArray(document.getElementById('fac-gymFee').value),
+    gymBelongings: document.getElementById('fac-gymBelongings').value,
+    gymProcedure: document.getElementById('fac-gymProcedure').value,
+    gymNotes: strToArray(document.getElementById('fac-gymNotes').value)
+  };
+  Object.assign(fac, custom);
+  localStorage.setItem('custom_facility_info', JSON.stringify(custom));
+  closeModalCustom('facility-edit-modal');
+  showToast('施設情報を保存しました', 'success');
+  const main = document.getElementById('main-content');
+  if (main) renderSettings(main);
+};
+
+window.resetFacilityInfo = function() {
+  if (confirm('施設情報をデフォルトに戻しますか？')) {
+    localStorage.removeItem('custom_facility_info');
+    location.reload();
+  }
+};
+
+
+async function renderMuscleMap() {
+  const container = document.getElementById('muscle-map-container');
+  if (!container) return;
+  
+  await ensureDateCache();
+  const cats = ['upper', 'lower', 'core', 'arm'];
+  const recoveryMap = {};
+  
+  for (const c of cats) {
+    const machines = window.GymneryFacility.machines.filter(m => m.category === c);
+    let minDays = 999;
+    for (const m of machines) {
+      const d = await calculateRecoveryDays(m.id);
+      if (d !== null && d < minDays) minDays = d;
+    }
+    
+    let color = '#374151'; // default dark gray
+    if (minDays === 0) color = '#ef4444'; // red
+    else if (minDays === 1 || minDays === 2) color = '#f59e0b'; // yellow
+    else if (minDays >= 3 || minDays === 999) color = '#10b981'; // green
+    
+    recoveryMap[c] = color;
+  }
+  
+  // Very simplified human body representation
+  const svgHtml = `
+    <svg viewBox="0 0 100 200" width="120" height="240">
+      <!-- Head -->
+      <circle cx="50" cy="20" r="15" fill="#374151" />
+      
+      <!-- Upper Body (Chest/Back/Shoulders) -->
+      <path d="M 30 40 Q 50 35 70 40 L 75 75 Q 50 85 25 75 Z" fill="${recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
+      
+      <!-- Core (Abs/Lower back) -->
+      <path d="M 32 75 Q 50 85 68 75 L 65 110 Q 50 115 35 110 Z" fill="${recoveryMap['core']}" stroke="#1f2937" stroke-width="2" />
+      
+      <!-- Arms -->
+      <!-- Left Arm -->
+      <path d="M 30 40 Q 20 50 15 80 L 25 80 Q 25 60 35 45 Z" fill="${recoveryMap['arm'] || recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
+      <!-- Right Arm -->
+      <path d="M 70 40 Q 80 50 85 80 L 75 80 Q 75 60 65 45 Z" fill="${recoveryMap['arm'] || recoveryMap['upper']}" stroke="#1f2937" stroke-width="2" />
+      
+      <!-- Lower Body (Legs) -->
+      <!-- Left Leg -->
+      <path d="M 35 110 Q 30 150 25 190 L 40 190 Q 45 150 48 115 Z" fill="${recoveryMap['lower']}" stroke="#1f2937" stroke-width="2" />
+      <!-- Right Leg -->
+      <path d="M 65 110 Q 70 150 75 190 L 60 190 Q 55 150 52 115 Z" fill="${recoveryMap['lower']}" stroke="#1f2937" stroke-width="2" />
+    </svg>
+  `;
+  container.innerHTML = svgHtml;
+}
