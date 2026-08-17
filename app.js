@@ -2560,13 +2560,13 @@ async function renderStats(main) {
         <div id="muscle-map-container" style="display:flex; justify-content:center; position:relative;">
           <!-- SVG is dynamically generated below -->
         </div>
-        <div class="flex justify-center gap-md mt-sm text-xs" style="flex-wrap:wrap;">
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#ef4444; border-radius:50%;"></span>当日</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#f59e0b; border-radius:50%;"></span>回復中(1-2日)</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#10b981; border-radius:50%;"></span>回復済(3日+)</span>
-          <span style="display:flex; align-items:center; gap:4px;"><span style="display:inline-block; width:10px; height:10px; background:#374151; border-radius:50%;"></span>未実施</span>
+        <div class="flex justify-center gap-md mt-xs text-xs" style="flex-wrap:wrap; gap:6px 10px;">
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:8px; height:8px; background:#ef4444; border-radius:50%;"></span>当日</span>
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:8px; height:8px; background:#f59e0b; border-radius:50%;"></span>回復中</span>
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:8px; height:8px; background:#10b981; border-radius:50%;"></span>回復済</span>
+          <span style="display:flex; align-items:center; gap:3px;"><span style="display:inline-block; width:8px; height:8px; background:#374151; border-radius:50%;"></span>未実施</span>
         </div>
-        <div id="muscle-detail-list" style="margin-top:12px;"></div>
+        <div id="muscle-detail-list" style="margin-top:6px;"></div>
       </div>
       <div class="stats-grid">
         <div class="stat-card">
@@ -3373,7 +3373,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v74)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v80)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4340,23 +4340,22 @@ async function renderMuscleMap() {
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
-  // Muscle groups with machine mappings
-  // Each muscle maps to one or more machineIds
+  // Muscle groups with machine mappings and recovery periods (days)
   const muscleGroups = [
-    { id: 'pectoralis', name: '大胸筋', machines: ['chest_press','fly','assisted_dips'], side: 'front', category: 'upper' },
-    { id: 'deltoid', name: '三角筋', machines: ['shoulder_press','chest_press'], side: 'both', category: 'upper' },
-    { id: 'trapezius', name: '僧帽筋', machines: ['lat_pulldown','assisted_chinning'], side: 'both', category: 'upper' },
-    { id: 'latissimus', name: '広背筋', machines: ['lat_pulldown','assisted_chinning'], side: 'back', category: 'upper' },
-    { id: 'biceps', name: '上腕二頭筋', machines: ['arm_curl','lat_pulldown','assisted_chinning'], side: 'front', category: 'arm' },
-    { id: 'triceps', name: '上腕三頭筋', machines: ['arm_extension','chest_press','assisted_dips','shoulder_press'], side: 'back', category: 'arm' },
-    { id: 'rectus_abdominis', name: '腹直筋', machines: ['abdominal','knee_raise'], side: 'front', category: 'core' },
-    { id: 'obliques', name: '腹斜筋', machines: ['rotary_torso'], side: 'front', category: 'core' },
-    { id: 'erector_spinae', name: '脊柱起立筋', machines: ['back_extension'], side: 'back', category: 'core' },
-    { id: 'quadriceps', name: '大腿四頭筋', machines: ['leg_extension','leg_press'], side: 'front', category: 'lower' },
-    { id: 'hamstrings', name: 'ハムストリングス', machines: ['leg_curl','leg_press'], side: 'back', category: 'lower' },
-    { id: 'glutes', name: '大臀筋', machines: ['glute','abduction','leg_press'], side: 'back', category: 'lower' },
-    { id: 'adductors', name: '内転筋群', machines: ['adduction'], side: 'front', category: 'lower' },
-    { id: 'calves', name: '下腿三頭筋', machines: ['calf_raise'], side: 'back', category: 'lower' },
+    { id: 'pectoralis', name: '大胸筋', machines: ['chest_press','fly','assisted_dips'], side: 'front', category: 'upper', recoveryDays: 2 },
+    { id: 'deltoid', name: '三角筋', machines: ['shoulder_press','chest_press'], side: 'both', category: 'upper', recoveryDays: 2 },
+    { id: 'trapezius', name: '僧帽筋', machines: ['lat_pulldown','assisted_chinning'], side: 'both', category: 'upper', recoveryDays: 2 },
+    { id: 'latissimus', name: '広背筋', machines: ['lat_pulldown','assisted_chinning'], side: 'back', category: 'upper', recoveryDays: 3 },
+    { id: 'biceps', name: '上腕二頭筋', machines: ['arm_curl','lat_pulldown','assisted_chinning'], side: 'front', category: 'arm', recoveryDays: 1 },
+    { id: 'triceps', name: '上腕三頭筋', machines: ['arm_extension','chest_press','assisted_dips','shoulder_press'], side: 'back', category: 'arm', recoveryDays: 1 },
+    { id: 'rectus_abdominis', name: '腹直筋', machines: ['abdominal','knee_raise'], side: 'front', category: 'core', recoveryDays: 1 },
+    { id: 'obliques', name: '腹斜筋', machines: ['rotary_torso'], side: 'front', category: 'core', recoveryDays: 1 },
+    { id: 'erector_spinae', name: '脊柱起立筋', machines: ['back_extension'], side: 'back', category: 'core', recoveryDays: 3 },
+    { id: 'quadriceps', name: '大腿四頭筋', machines: ['leg_extension','leg_press'], side: 'front', category: 'lower', recoveryDays: 3 },
+    { id: 'hamstrings', name: 'ハムストリングス', machines: ['leg_curl','leg_press'], side: 'back', category: 'lower', recoveryDays: 3 },
+    { id: 'glutes', name: '大臀筋', machines: ['glute','abduction','leg_press'], side: 'back', category: 'lower', recoveryDays: 3 },
+    { id: 'adductors', name: '内転筋群', machines: ['adduction'], side: 'front', category: 'lower', recoveryDays: 2 },
+    { id: 'calves', name: '下腿三頭筋', machines: ['calf_raise'], side: 'back', category: 'lower', recoveryDays: 2 },
   ];
 
   // Calculate recovery days for each muscle group
@@ -4377,14 +4376,16 @@ async function renderMuscleMap() {
       diffDays = Math.floor((today.getTime() - lastDay.getTime()) / (1000 * 3600 * 24));
     }
 
+    const rd = mg.recoveryDays || 2; // recovery period for this muscle
     let color = '#374151'; // never trained - dark gray
     let status = '未実施';
-    if (diffDays === 0) { color = '#ef4444'; status = '当日'; }
-    else if (diffDays === 1) { color = '#f97316'; status = '1日前'; }
-    else if (diffDays === 2) { color = '#f59e0b'; status = '2日前'; }
-    else if (diffDays >= 3 && diffDays < 999) { color = '#10b981'; status = diffDays + '日前'; }
+    if (diffDays >= 0) {
+      if (diffDays === 0) { color = '#ef4444'; status = '当日'; }
+      else if (diffDays < rd) { color = '#f59e0b'; status = diffDays + '日前'; }
+      else { color = '#10b981'; status = diffDays + '日前'; }
+    }
 
-    muscleRecovery[mg.id] = { color, diffDays, status, name: mg.name, machines: mg.machines, category: mg.category, side: mg.side };
+    muscleRecovery[mg.id] = { color, diffDays, status, name: mg.name, machines: mg.machines, category: mg.category, side: mg.side, recoveryDays: rd };
   }
 
   const gc = (id) => muscleRecovery[id] ? muscleRecovery[id].color : '#374151';
@@ -4394,7 +4395,7 @@ async function renderMuscleMap() {
   // viewBox: front body 0-200, back body 220-420
   // =============================================
   const svgHtml = `
-    <svg viewBox="0 0 440 520" width="100%" style="max-width:380px;" xmlns="http://www.w3.org/2000/svg">
+    <svg viewBox="0 0 440 310" width="100%" style="max-width:380px;" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <style>
           .muscle-path { stroke: #1f293766; stroke-width: 0.8; cursor: pointer; transition: opacity 0.2s; }
@@ -4589,6 +4590,7 @@ async function renderMuscleMap() {
       status: r.status,
       color: r.color,
       diffDays: r.diffDays,
+      recoveryDays: r.recoveryDays,
       machineNames
     });
   }
@@ -4596,19 +4598,23 @@ async function renderMuscleMap() {
   let listHtml = '';
   for (const cat of ['upper','core','arm','lower']) {
     if (!grouped[cat]) continue;
-    listHtml += '<div style="margin-bottom:10px;">';
-    listHtml += '<div style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:4px;">' + (categoryIcons[cat]||'') + ' ' + (categoryLabels[cat]||cat) + '</div>';
+    listHtml += '<div style="margin-bottom:8px;">';
+    listHtml += '<div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); margin-bottom:2px;">' + (categoryIcons[cat]||'') + ' ' + (categoryLabels[cat]||cat) + '</div>';
     for (const item of grouped[cat]) {
-      const dotStyle = 'display:inline-block; width:8px; height:8px; border-radius:50%; background:' + item.color + '; margin-right:6px; flex-shrink:0;';
-      const statusStyle = 'font-size:0.7rem; padding:1px 6px; border-radius:8px; background:' + item.color + '22; color:' + item.color + '; font-weight:bold; white-space:nowrap;';
+      const dotStyle = 'display:inline-block; width:8px; height:8px; border-radius:50%; background:' + item.color + '; margin-right:5px; flex-shrink:0;';
+      const statusStyle = 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + item.color + '22; color:' + item.color + '; font-weight:bold; white-space:nowrap;';
       const machinesStr = item.machineNames.join(', ');
-      listHtml += '<div style="display:flex; align-items:center; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--border-color); gap:6px;">';
-      listHtml += '  <div style="display:flex; align-items:center; min-width:0;">';
-      listHtml += '    <span style="' + dotStyle + '"></span>';
-      listHtml += '    <span style="font-size:0.8rem; font-weight:600; white-space:nowrap;">' + item.name + '</span>';
-      listHtml += '    <span style="font-size:0.65rem; color:var(--text-secondary); margin-left:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">' + machinesStr + '</span>';
+      const rdLabel = '(' + item.recoveryDays + '日)';
+      listHtml += '<div style="padding:3px 0; border-bottom:1px solid var(--border-color);">';
+      listHtml += '  <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">';
+      listHtml += '    <div style="display:flex; align-items:center; gap:0;">';
+      listHtml += '      <span style="' + dotStyle + '"></span>';
+      listHtml += '      <span style="font-size:0.78rem; font-weight:600; white-space:nowrap;">' + item.name + '</span>';
+      listHtml += '      <span style="font-size:0.6rem; color:var(--text-muted); margin-left:2px; white-space:nowrap;" title="回復目安">' + rdLabel + '</span>';
+      listHtml += '    </div>';
+      listHtml += '    <span style="' + statusStyle + '">' + item.status + '</span>';
       listHtml += '  </div>';
-      listHtml += '  <span style="' + statusStyle + '">' + item.status + '</span>';
+      listHtml += '  <div style="font-size:0.6rem; color:var(--text-muted); padding-left:14px; line-height:1.3;">' + machinesStr + '</div>';
       listHtml += '</div>';
     }
     listHtml += '</div>';
