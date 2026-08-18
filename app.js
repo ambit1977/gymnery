@@ -1,3 +1,27 @@
+
+// 種目履歴フィルター用グローバルステート
+window.machineHistoryFilterCategory = 'all';
+window.machineHistoryFilterMuscle = null;
+
+window.navigateToMachineHistoryByMuscle = function(muscleId) {
+  window.machineHistoryFilterMuscle = muscleId;
+  window.machineHistoryFilterCategory = 'all';
+  currentHistoryTab = 'machines';
+  navigateTo('history');
+};
+
+window.setMachineHistoryCategoryFilter = function(cat) {
+  window.machineHistoryFilterCategory = cat;
+  window.machineHistoryFilterMuscle = null;
+  const tabContent = document.getElementById('history-tab-content');
+  if (tabContent) renderMachinesTab(tabContent);
+};
+
+window.clearMachineHistoryMuscleFilter = function() {
+  window.machineHistoryFilterMuscle = null;
+  const tabContent = document.getElementById('history-tab-content');
+  if (tabContent) renderMachinesTab(tabContent);
+};
 let lastViewedSessionId = null;
 let lastViewedSessionDate = null;
 // ========================================
@@ -1705,14 +1729,26 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
       let defaultData = JSON.parse(JSON.stringify(data));
       if (machine.type === 'strength' && machine.hasSets) {
         if (mode === 'ok' && machine.weights && defaultData.length > 0) {
-          let maxWeight = 0;
-          defaultData.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
-          const idx = machine.weights.findIndex(w => w >= maxWeight);
-          if (idx !== -1 && idx < machine.weights.length - 1) {
-            const nextWeight = machine.weights[idx + 1];
-            defaultData.forEach(s => {
-              if (s.weight === maxWeight) s.weight = nextWeight;
-            });
+          const isAssisted = machine.id.startsWith('assisted_') || (machine.fields && machine.fields.some(f => f.label === 'アシスト'));
+          if (isAssisted) {
+            // アシスト系マシンは「重りを減らす（自重に近づける）＝負荷UP」
+            let currentWeight = defaultData[0].weight !== undefined ? defaultData[0].weight : 999;
+            const idx = machine.weights.findIndex(w => w === currentWeight);
+            if (idx > 0) {
+              const nextWeight = machine.weights[idx - 1]; // より軽いアシストへ
+              defaultData.forEach(s => { s.weight = nextWeight; });
+            }
+          } else {
+            // 通常マシンは「重りを増やす＝負荷UP」
+            let maxWeight = 0;
+            defaultData.forEach(s => { if (s.weight > maxWeight) maxWeight = s.weight; });
+            const idx = machine.weights.findIndex(w => w >= maxWeight);
+            if (idx !== -1 && idx < machine.weights.length - 1) {
+              const nextWeight = machine.weights[idx + 1];
+              defaultData.forEach(s => {
+                if (s.weight === maxWeight) s.weight = nextWeight;
+              });
+            }
           }
         }
         await saveMachineSetting(machineId, { data: [defaultData[0]], note: machineNote });
@@ -2620,7 +2656,6 @@ ${sessionsPromptText}
 
 async function renderMachinesTab(container) {
   const now = new Date();
-  const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
   
   // すべてのエクササイズ履歴を取得
   const exercises = await getAllExercises();
@@ -2637,65 +2672,122 @@ async function renderMachinesTab(container) {
     }
   });
 
-  // 過去2週間以内に実施されたマシンを抽出＆古い順にソート
-  const machineHistory = [];
-  lastExecutionMap.forEach((lastDate, machineId) => {
-    if (lastDate >= twoWeeksAgo) {
-      const machine = getMachineById(machineId);
-      if (machine) {
-        machineHistory.push({
-          machine,
-          lastDate,
-        });
-      }
+  const allMachines = window.GymneryFacility?.machines || [];
+  
+  // 筋肉グループ定義（筋肉別フィルタリング用）
+  const muscleGroups = [
+    { id: 'pectoralis', name: '大胸筋', machines: ['chest_press','fly','assisted_dips'] },
+    { id: 'deltoid', name: '三角筋', machines: ['shoulder_press','chest_press'] },
+    { id: 'trapezius', name: '僧帽筋', machines: ['lat_pulldown','assisted_chinning'] },
+    { id: 'latissimus', name: '広背筋', machines: ['lat_pulldown','assisted_chinning'] },
+    { id: 'biceps', name: '上腕二頭筋', machines: ['arm_curl','lat_pulldown','assisted_chinning'] },
+    { id: 'triceps', name: '上腕三頭筋', machines: ['arm_extension','chest_press','assisted_dips','shoulder_press'] },
+    { id: 'rectus_abdominis', name: '腹直筋', machines: ['abdominal','knee_raise'] },
+    { id: 'obliques', name: '腹斜筋', machines: ['rotary_torso'] },
+    { id: 'erector_spinae', name: '脊柱起立筋', machines: ['back_extension'] },
+    { id: 'quadriceps', name: '大腿四頭筋', machines: ['leg_extension','leg_press'] },
+    { id: 'hamstrings', name: 'ハムストリングス', machines: ['leg_curl','leg_press'] },
+    { id: 'glutes', name: '大臀筋', machines: ['glute','abduction','leg_press'] },
+    { id: 'adductors', name: '内転筋群', machines: ['adduction'] },
+    { id: 'calves', name: '下腿三頭筋', machines: ['calf_raise'] },
+  ];
+
+  let selectedMuscle = null;
+  if (window.machineHistoryFilterMuscle) {
+    selectedMuscle = muscleGroups.find(mg => mg.id === window.machineHistoryFilterMuscle);
+  }
+
+  // フィルタリング
+  let filteredMachines = allMachines.filter(m => {
+    if (selectedMuscle) {
+      return selectedMuscle.machines.includes(m.id);
     }
+    if (window.machineHistoryFilterCategory && window.machineHistoryFilterCategory !== 'all') {
+      return m.category === window.machineHistoryFilterCategory;
+    }
+    return true;
   });
 
-  // 最終実施日が「古い順」にソート
-  machineHistory.sort((a, b) => a.lastDate - b.lastDate);
+  // 実施履歴があるマシンと未実施マシンに分けて、実施済みは「直近・新しい順」にソート
+  const machineListWithDates = filteredMachines.map(m => {
+    return {
+      machine: m,
+      lastDate: lastExecutionMap.get(m.id) || null
+    };
+  });
+
+  machineListWithDates.sort((a, b) => {
+    if (a.lastDate && b.lastDate) return b.lastDate - a.lastDate; // 新しい順
+    if (a.lastDate) return -1;
+    if (b.lastDate) return 1;
+    return 0;
+  });
+
+  // カテゴリフィルターバーHTML
+  const cats = [
+    { id: 'all', label: 'すべて', icon: '📋' },
+    { id: 'upper', label: '上半身', icon: '💪' },
+    { id: 'lower', label: '下半身', icon: '🦵' },
+    { id: 'core', label: '体幹', icon: '🧘' },
+    { id: 'arm', label: '腕', icon: '🤜' },
+    { id: 'cardio', label: '有酸素', icon: '🏃' },
+  ];
+
+  const filterChipsHtml = cats.map(c => {
+    const isActive = (!selectedMuscle && window.machineHistoryFilterCategory === c.id);
+    return `<button class="btn btn-sm ${isActive ? 'btn-primary' : 'btn-ghost'}" onclick="setMachineHistoryCategoryFilter('${c.id}')" style="padding: 4px 10px; font-size: 0.72rem; border-radius: 16px; white-space: nowrap;">${c.icon} ${c.label}</button>`;
+  }).join('');
+
+  let activeFilterBadge = '';
+  if (selectedMuscle) {
+    activeFilterBadge = `
+      <div style="display:flex; align-items:center; justify-content:space-between; background:var(--bg-elevated); border:1px solid var(--accent); padding:6px 12px; border-radius:var(--radius-sm); margin-bottom:12px;">
+        <span style="font-size:0.8rem; color:var(--accent); font-weight:bold;">🔍 筋肉絞り込み: ${selectedMuscle.name}</span>
+        <button class="btn btn-ghost btn-sm" onclick="clearMachineHistoryMuscleFilter()" style="padding:2px 6px; font-size:0.75rem; color:var(--text-muted);">✕ 解除</button>
+      </div>
+    `;
+  }
 
   let listHtml = '';
-  for (const item of machineHistory) {
+  for (const item of machineListWithDates) {
     const m = item.machine;
-    const diffDays = getDaysDiff(now, item.lastDate);
-    
-    let daysStr = '';
+    let daysStr = '未実施';
     let badgeColor = 'var(--text-secondary)';
+    let metaStr = 'まだ記録がありません';
     
-    if (diffDays === 0) {
-      daysStr = '今日';
-    } else if (diffDays === 1) {
-      daysStr = '昨日';
-    } else {
-      daysStr = `中 ${diffDays - 1} 日`;
-    }
+    if (item.lastDate) {
+      const diffDays = getDaysDiff(now, item.lastDate);
+      if (diffDays === 0) daysStr = '今日';
+      else if (diffDays === 1) daysStr = '昨日';
+      else daysStr = `中 ${diffDays - 1} 日`;
 
-    // 回復度の色の計算
-    if (m.category === 'upper' || m.category === 'arm') {
-      badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
-    } else if (m.category === 'lower') {
-      badgeColor = diffDays < 3 ? '#ff6b6b' : (diffDays === 3 ? '#ffe66d' : '#4ecdc4');
-    } else if (m.category === 'core') {
-      badgeColor = diffDays < 1 ? '#ff6b6b' : (diffDays === 1 ? '#ffe66d' : '#4ecdc4');
-    } else {
-      badgeColor = '#4ecdc4';
+      metaStr = `最終実施: ${item.lastDate.getMonth() + 1}月${item.lastDate.getDate()}日 (${getDayOfWeek(item.lastDate.toISOString())})`;
+
+      if (m.category === 'upper' || m.category === 'arm') {
+        badgeColor = diffDays < 2 ? '#ff6b6b' : (diffDays === 2 ? '#ffe66d' : '#4ecdc4');
+      } else if (m.category === 'lower') {
+        badgeColor = diffDays < 3 ? '#ff6b6b' : (diffDays === 3 ? '#ffe66d' : '#4ecdc4');
+      } else if (m.category === 'core') {
+        badgeColor = diffDays < 1 ? '#ff6b6b' : (diffDays === 1 ? '#ffe66d' : '#4ecdc4');
+      } else {
+        badgeColor = '#4ecdc4';
+      }
     }
 
     const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
+    
     listHtml += `
       <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
-        <div style="display: flex; align-items: center; gap: var(--space-sm);">
-          <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
-          <div class="machine-info">
-            <div class="machine-name" style="font-weight: bold; font-size: 0.95rem;">${m.name}</div>
-            <div class="machine-meta" style="font-size: 0.75rem; color: var(--text-secondary);">
-              最終実施: ${item.lastDate.getMonth() + 1}月${item.lastDate.getDate()}日 (${getDayOfWeek(item.lastDate.toISOString())})
-            </div>
+        <div style="display: flex; align-items: center; gap: var(--space-sm); min-width:0; flex:1;">
+          <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%; flex-shrink:0;">${getCategoryIcon(m.category)}</div>
+          <div class="machine-info" style="min-width:0;">
+            <div class="machine-name" style="font-weight: bold; font-size: 0.95rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${m.name}</div>
+            <div class="machine-meta" style="font-size: 0.72rem; color: var(--text-secondary); margin-top:2px;">${metaStr}</div>
           </div>
         </div>
-        <div style="display: flex; align-items: center; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px; flex-shrink:0; margin-left:8px;">
           ${cameraBtn}
-          <span class="badge" style="color: ${badgeColor}; background: ${badgeColor}15; border: 1px solid ${badgeColor}33; font-size: 0.75rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
+          <span class="badge" style="color: ${badgeColor}; background: ${badgeColor}15; border: 1px solid ${badgeColor}33; font-size: 0.72rem; padding: 3px 8px; border-radius: 12px; font-weight: bold;">${daysStr}</span>
           <div class="machine-arrow" style="color: var(--text-secondary); font-size: 1.2rem;">›</div>
         </div>
       </div>
@@ -2703,9 +2795,18 @@ async function renderMachinesTab(container) {
   }
 
   container.innerHTML = `
-    <div class="section-title">過去2週間の実施種目 (古い順)</div>
-    <p class="text-xs text-muted mb-md">しばらく実施していない種目から並んでいます。</p>
-    ${listHtml || '<div class="empty-state"><div class="empty-icon">🏋️</div><div class="empty-text">過去2週間に実施した種目がありません</div></div>'}`;
+    <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:8px; margin-bottom:10px;">
+      ${filterChipsHtml}
+    </div>
+    ${activeFilterBadge}
+    <div class="section-title" style="display:flex; justify-content:space-between; align-items:center;">
+      <span>種目履歴一覧 (最近実施した順)</span>
+      <span class="text-xs text-muted">タップで全セット履歴表示</span>
+    </div>
+    <div style="margin-top:8px;">
+      ${listHtml || '<div class="empty-state"><div class="empty-icon">🏋️</div><div class="empty-text">該当する種目がありません</div></div>'}
+    </div>
+  `;
 }
 
 let calendarDate = new Date();
@@ -3661,7 +3762,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v86)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v87)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4709,44 +4810,44 @@ async function renderMuscleMap() {
         <rect x="82" y="38" width="16" height="18" rx="4" fill="#2d3748" stroke="#4b5563" stroke-width="0.5"/>
 
         <!-- Trapezius front / 僧帽筋 -->
-        <path d="M 72 42 Q 66 46 56 52 L 62 58 Q 72 52 78 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
-        <path d="M 108 42 Q 114 46 124 52 L 118 58 Q 108 52 102 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+        <path d="M 72 42 Q 66 46 56 52 L 62 58 Q 72 52 78 48 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('trapezius')}" />
+        <path d="M 108 42 Q 114 46 124 52 L 118 58 Q 108 52 102 48 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('trapezius')}" />
 
         <!-- Deltoid front / 三角筋 -->
-        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
-        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('deltoid')}" />
+        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('deltoid')}" />
 
         <!-- Pectoralis / 大胸筋 -->
-        <path d="M 62 58 Q 78 54 90 58 L 90 88 Q 78 92 68 86 L 62 74 Z" class="muscle-path" fill="${gc('pectoralis')}" />
-        <path d="M 118 58 Q 102 54 90 58 L 90 88 Q 102 92 112 86 L 118 74 Z" class="muscle-path" fill="${gc('pectoralis')}" />
+        <path d="M 62 58 Q 78 54 90 58 L 90 88 Q 78 92 68 86 L 62 74 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('pectoralis')}" />
+        <path d="M 118 58 Q 102 54 90 58 L 90 88 Q 102 92 112 86 L 118 74 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('pectoralis')}" />
 
         <!-- Biceps / 上腕二頭筋 -->
-        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" fill="${gc('biceps')}" />
-        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" fill="${gc('biceps')}" />
+        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('biceps')}" />
+        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('biceps')}" />
 
         <!-- Forearm -->
         <path d="M 36 112 Q 30 134 26 156 L 36 158 Q 38 136 46 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
         <path d="M 144 112 Q 150 134 154 156 L 144 158 Q 142 136 134 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
 
         <!-- Rectus Abdominis / 腹直筋 -->
-        <path d="M 78 88 L 78 96 L 90 98 L 90 88 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
-        <path d="M 90 88 L 90 98 L 102 96 L 102 88 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
-        <path d="M 78 96 L 78 106 L 90 108 L 90 98 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
-        <path d="M 90 98 L 90 108 L 102 106 L 102 96 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
-        <path d="M 78 106 L 78 116 L 90 118 L 90 108 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
-        <path d="M 90 108 L 90 118 L 102 116 L 102 106 Z" class="muscle-path" fill="${gc('rectus_abdominis')}" />
+        <path d="M 78 88 L 78 96 L 90 98 L 90 88 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 88 L 90 98 L 102 96 L 102 88 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
+        <path d="M 78 96 L 78 106 L 90 108 L 90 98 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 98 L 90 108 L 102 106 L 102 96 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
+        <path d="M 78 106 L 78 116 L 90 118 L 90 108 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
+        <path d="M 90 108 L 90 118 L 102 116 L 102 106 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('rectus_abdominis')}" />
 
         <!-- Obliques / 腹斜筋 -->
-        <path d="M 68 86 Q 72 98 74 118 L 78 118 L 78 88 Q 74 90 68 86 Z" class="muscle-path" fill="${gc('obliques')}" />
-        <path d="M 112 86 Q 108 98 106 118 L 102 118 L 102 88 Q 106 90 112 86 Z" class="muscle-path" fill="${gc('obliques')}" />
+        <path d="M 68 86 Q 72 98 74 118 L 78 118 L 78 88 Q 74 90 68 86 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('obliques')}" />
+        <path d="M 112 86 Q 108 98 106 118 L 102 118 L 102 88 Q 106 90 112 86 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('obliques')}" />
 
         <!-- Adductors / 内転筋群 -->
-        <path d="M 82 122 Q 84 158 86 186 L 90 186 L 90 122 Z" class="muscle-path" fill="${gc('adductors')}" />
-        <path d="M 98 122 Q 96 158 94 186 L 90 186 L 90 122 Z" class="muscle-path" fill="${gc('adductors')}" />
+        <path d="M 82 122 Q 84 158 86 186 L 90 186 L 90 122 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('adductors')}" />
+        <path d="M 98 122 Q 96 158 94 186 L 90 186 L 90 122 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('adductors')}" />
 
         <!-- Quadriceps / 大腿四頭筋 -->
-        <path d="M 74 118 Q 68 152 62 194 L 78 194 Q 82 158 82 122 L 78 118 Z" class="muscle-path" fill="${gc('quadriceps')}" />
-        <path d="M 106 118 Q 112 152 118 194 L 102 194 Q 98 158 98 122 L 102 118 Z" class="muscle-path" fill="${gc('quadriceps')}" />
+        <path d="M 74 118 Q 68 152 62 194 L 78 194 Q 82 158 82 122 L 78 118 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('quadriceps')}" />
+        <path d="M 106 118 Q 112 152 118 194 L 102 194 Q 98 158 98 122 L 102 118 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('quadriceps')}" />
 
         <!-- Tibialis / shin -->
         <path d="M 62 194 Q 58 230 56 270 L 68 270 Q 70 234 74 200 L 78 194 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
@@ -4788,25 +4889,25 @@ async function renderMuscleMap() {
         <rect x="82" y="38" width="16" height="18" rx="4" fill="#2d3748" stroke="#4b5563" stroke-width="0.5"/>
 
         <!-- Trapezius back / 僧帽筋 -->
-        <path d="M 78 42 Q 84 50 90 60 Q 96 50 102 42 L 90 36 Z" class="muscle-path" fill="${gc('trapezius')}" />
-        <path d="M 72 42 Q 66 46 56 52 L 62 58 L 78 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
-        <path d="M 108 42 Q 114 46 124 52 L 118 58 L 102 48 Z" class="muscle-path" fill="${gc('trapezius')}" />
+        <path d="M 78 42 Q 84 50 90 60 Q 96 50 102 42 L 90 36 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('trapezius')}" />
+        <path d="M 72 42 Q 66 46 56 52 L 62 58 L 78 48 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('trapezius')}" />
+        <path d="M 108 42 Q 114 46 124 52 L 118 58 L 102 48 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('trapezius')}" />
 
         <!-- Deltoid back / 三角筋 -->
-        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
-        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" fill="${gc('deltoid')}" />
+        <path d="M 56 52 Q 42 58 38 72 L 48 76 Q 50 64 62 58 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('deltoid')}" />
+        <path d="M 124 52 Q 138 58 142 72 L 132 76 Q 130 64 118 58 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('deltoid')}" />
 
         <!-- Latissimus Dorsi / 広背筋 -->
-        <path d="M 62 58 Q 72 56 80 60 L 78 92 Q 70 96 64 88 L 60 72 Z" class="muscle-path" fill="${gc('latissimus')}" />
-        <path d="M 118 58 Q 108 56 100 60 L 102 92 Q 110 96 116 88 L 120 72 Z" class="muscle-path" fill="${gc('latissimus')}" />
+        <path d="M 62 58 Q 72 56 80 60 L 78 92 Q 70 96 64 88 L 60 72 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('latissimus')}" />
+        <path d="M 118 58 Q 108 56 100 60 L 102 92 Q 110 96 116 88 L 120 72 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('latissimus')}" />
 
         <!-- Erector Spinae / 脊柱起立筋 -->
-        <path d="M 84 60 L 84 118 L 90 120 L 90 60 Z" class="muscle-path" fill="${gc('erector_spinae')}" />
-        <path d="M 96 60 L 96 118 L 90 120 L 90 60 Z" class="muscle-path" fill="${gc('erector_spinae')}" />
+        <path d="M 84 60 L 84 118 L 90 120 L 90 60 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('erector_spinae')}" />
+        <path d="M 96 60 L 96 118 L 90 120 L 90 60 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('erector_spinae')}" />
 
         <!-- Triceps / 上腕三頭筋 -->
-        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" fill="${gc('triceps')}" />
-        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" fill="${gc('triceps')}" />
+        <path d="M 48 76 Q 42 88 36 112 L 46 116 Q 50 94 52 82 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('triceps')}" />
+        <path d="M 132 76 Q 138 88 144 112 L 134 116 Q 130 94 128 82 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('triceps')}" />
 
         <!-- Forearm back -->
         <path d="M 36 112 Q 30 134 26 156 L 36 158 Q 38 136 46 116 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
@@ -4817,16 +4918,16 @@ async function renderMuscleMap() {
         <path d="M 116 88 Q 112 102 106 118 L 102 118 L 102 92 Q 110 96 116 88 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.3" />
 
         <!-- Glutes / 大臀筋 -->
-        <path d="M 74 118 Q 72 128 72 140 Q 80 146 90 142 L 90 120 Q 84 122 78 120 Z" class="muscle-path" fill="${gc('glutes')}" />
-        <path d="M 106 118 Q 108 128 108 140 Q 100 146 90 142 L 90 120 Q 96 122 102 120 Z" class="muscle-path" fill="${gc('glutes')}" />
+        <path d="M 74 118 Q 72 128 72 140 Q 80 146 90 142 L 90 120 Q 84 122 78 120 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('glutes')}" />
+        <path d="M 106 118 Q 108 128 108 140 Q 100 146 90 142 L 90 120 Q 96 122 102 120 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('glutes')}" />
 
         <!-- Hamstrings / ハムストリングス -->
-        <path d="M 72 140 Q 66 170 62 200 L 78 200 Q 82 166 86 146 Q 80 146 72 140 Z" class="muscle-path" fill="${gc('hamstrings')}" />
-        <path d="M 108 140 Q 114 170 118 200 L 102 200 Q 98 166 94 146 Q 100 146 108 140 Z" class="muscle-path" fill="${gc('hamstrings')}" />
+        <path d="M 72 140 Q 66 170 62 200 L 78 200 Q 82 166 86 146 Q 80 146 72 140 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('hamstrings')}" />
+        <path d="M 108 140 Q 114 170 118 200 L 102 200 Q 98 166 94 146 Q 100 146 108 140 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('hamstrings')}" />
 
         <!-- Calves / 下腿三頭筋 -->
-        <path d="M 62 204 Q 58 224 56 240 Q 60 250 68 254 Q 74 240 76 224 L 78 204 Z" class="muscle-path" fill="${gc('calves')}" />
-        <path d="M 118 204 Q 122 224 124 240 Q 120 250 112 254 Q 106 240 104 224 L 102 204 Z" class="muscle-path" fill="${gc('calves')}" />
+        <path d="M 62 204 Q 58 224 56 240 Q 60 250 68 254 Q 74 240 76 224 L 78 204 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('calves')}" />
+        <path d="M 118 204 Q 122 224 124 240 Q 120 250 112 254 Q 106 240 104 224 L 102 204 Z" class="muscle-path" onclick="navigateToMachineHistoryByMuscle(this.id)" fill="${gc('calves')}" />
 
         <!-- Lower legs -->
         <path d="M 56 240 Q 56 260 56 270 L 68 270 Q 68 260 68 254 Z" fill="#2d3748" stroke="#4b5563" stroke-width="0.5" />
@@ -4876,6 +4977,7 @@ async function renderMuscleMap() {
       return m ? m.name : mid;
     }).filter(Boolean);
     grouped[mg.category].push({
+      id: mg.id,
       name: mg.name,
       status: r.status,
       color: r.color,
@@ -4895,11 +4997,11 @@ async function renderMuscleMap() {
       const statusStyle = 'font-size:0.65rem; padding:1px 5px; border-radius:8px; background:' + item.color + '22; color:' + item.color + '; font-weight:bold; white-space:nowrap;';
       const machinesStr = item.machineNames.join(', ');
       const rdLabel = '(' + item.recoveryDays + '日)';
-      listHtml += '<div style="padding:3px 0; border-bottom:1px solid var(--border-color);">';
+      listHtml += '<div style="padding:4px 6px; margin-bottom:3px; border-radius:4px; cursor:pointer; transition:background 0.15s;" onmouseover="this.style.background=\'rgba(255,255,255,0.04)\'" onmouseout="this.style.background=\'\'" onclick="navigateToMachineHistoryByMuscle(\'' + item.id + '\')">';
       listHtml += '  <div style="display:flex; align-items:center; justify-content:space-between; gap:4px;">';
       listHtml += '    <div style="display:flex; align-items:center; gap:0;">';
       listHtml += '      <span style="' + dotStyle + '"></span>';
-      listHtml += '      <span style="font-size:0.78rem; font-weight:600; white-space:nowrap;">' + item.name + '</span>';
+      listHtml += '      <span style="font-size:0.78rem; font-weight:600; white-space:nowrap; color:var(--text-primary);">' + item.name + ' <span style="font-size:0.65rem; color:var(--accent);">›</span></span>';
       listHtml += '      <span style="font-size:0.6rem; color:var(--text-muted); margin-left:2px; white-space:nowrap;" title="回復目安">' + rdLabel + '</span>';
       listHtml += '    </div>';
       listHtml += '    <span style="' + statusStyle + '">' + item.status + '</span>';
