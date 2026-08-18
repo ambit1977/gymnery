@@ -60,6 +60,20 @@ async function loadFacilityConfig() {
   }
 
   if (configData) {
+    // カスタム施設情報のマージ
+    try {
+      const customFac = JSON.parse(localStorage.getItem('custom_facility_info') || 'null');
+      if (customFac) Object.assign(configData, customFac);
+    } catch (e) {}
+
+    // カスタムマシン一覧のマージ
+    try {
+      const customMachines = JSON.parse(localStorage.getItem('custom_machines') || 'null');
+      if (customMachines && Array.isArray(customMachines)) {
+        configData.machines = customMachines;
+      }
+    } catch (e) {}
+
     window.GymneryFacility = configData;
     // タイトルの書き換え
     document.title = `トレーニング記録 - ${configData.name}`;
@@ -3515,6 +3529,22 @@ function renderSettings(main) {
         </div>
       </div>
 
+      <div class="card mb-md" style="cursor: pointer;" onclick="showMachineManagementList()">
+        <div class="text-sm font-bold mb-xs flex justify-between items-center">
+          <span>🏋️ 設置マシン一覧・設定</span>
+          <span class="btn btn-ghost btn-sm" style="padding: 2px 6px; color:var(--accent);">一覧を見る ›</span>
+        </div>
+        <p class="text-xs text-muted mb-xs">設置されているマシンの名前、重量設定、説明、動画URLなどを確認・編集できます。</p>
+        <div class="flex gap-xs mt-sm" style="flex-wrap: wrap;">
+          <span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.7rem; padding:2px 6px;">全 ${window.GymneryFacility?.machines?.length || 0} 台</span>
+          <span class="badge" style="background:#4ecdc422; color:#4ecdc4; font-size:0.7rem; padding:2px 6px;">上半身 ${window.GymneryFacility?.machines?.filter(m => m.category==='upper').length || 0}</span>
+          <span class="badge" style="background:#ff6b6b22; color:#ff6b6b; font-size:0.7rem; padding:2px 6px;">下半身 ${window.GymneryFacility?.machines?.filter(m => m.category==='lower').length || 0}</span>
+          <span class="badge" style="background:#ffe66d22; color:#ffe66d; font-size:0.7rem; padding:2px 6px;">体幹 ${window.GymneryFacility?.machines?.filter(m => m.category==='core').length || 0}</span>
+          <span class="badge" style="background:#a855f722; color:#a855f7; font-size:0.7rem; padding:2px 6px;">腕 ${window.GymneryFacility?.machines?.filter(m => m.category==='arm').length || 0}</span>
+          <span class="badge" style="background:#38bdf822; color:#38bdf8; font-size:0.7rem; padding:2px 6px;">有酸素 ${window.GymneryFacility?.machines?.filter(m => m.category==='cardio').length || 0}</span>
+        </div>
+      </div>
+
       <div class="card mb-md">
         <div class="text-sm font-bold mb-sm">🪪 会員番号設定</div>
         <p class="text-xs text-muted mb-md">受付用の会員番号（利用証番号）を登録します。</p>
@@ -3566,7 +3596,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v81)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v82)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4814,3 +4844,332 @@ async function renderMuscleMap() {
   }
   detailList.innerHTML = listHtml;
 }
+
+
+// ========================================
+// 設置マシン一覧 ＆ マシン設定エディタ
+// ========================================
+
+window.showMachineManagementList = function() {
+  const machines = window.GymneryFacility?.machines || [];
+  const cats = ['upper', 'lower', 'core', 'arm', 'cardio'];
+  const catLabels = { upper: '上半身', lower: '下半身', core: '体幹', arm: '腕', cardio: '有酸素' };
+  const catColors = { upper: '#4ecdc4', lower: '#ff6b6b', core: '#ffe66d', arm: '#a855f7', cardio: '#38bdf8' };
+  const catIcons = { upper: '💪', lower: '🦵', core: '🧘', arm: '🤜', cardio: '🏃' };
+
+  let listHtml = '';
+  for (const cat of cats) {
+    const catMachines = machines.filter(m => m.category === cat);
+    if (catMachines.length === 0) continue;
+
+    listHtml += `
+      <div style="margin-top: 14px; margin-bottom: 6px; font-weight: bold; font-size: 0.85rem; color: ${catColors[cat]}; display: flex; align-items: center; gap: 4px;">
+        <span>${catIcons[cat]}</span>
+        <span>${catLabels[cat]} (${catMachines.length}台)</span>
+      </div>
+    `;
+
+    for (const m of catMachines) {
+      let weightInfo = '';
+      if (m.type === 'strength' && m.weights && m.weights.length > 0) {
+        weightInfo = `<div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">重量: ${m.weights[0]}kg 〜 ${m.weights[m.weights.length-1]}kg (${m.weights.length}段階)</div>`;
+      } else if (m.type === 'cardio') {
+        weightInfo = `<div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">有酸素マシン (距離/速度/時間)</div>`;
+      }
+
+      const mediaBadges = `
+        <span style="font-size: 0.65rem; display: inline-flex; gap: 4px; margin-left: 6px;">
+          ${m.image ? '<span title="写真あり">📷</span>' : ''}
+          ${m.videoUrl ? '<span title="動画あり">🎬</span>' : ''}
+        </span>
+      `;
+
+      listHtml += `
+        <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 6px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
+          <div style="min-width: 0; flex: 1;">
+            <div style="font-weight: bold; font-size: 0.9rem; display: flex; align-items: center;">
+              <span>${m.name}</span>
+              ${mediaBadges}
+            </div>
+            ${weightInfo}
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="openMachineConfigModal('${m.id}')" style="padding: 4px 10px; font-size: 0.75rem; flex-shrink: 0; margin-left: 8px;">✏️ 編集</button>
+        </div>
+      `;
+    }
+  }
+
+  const modalHtml = `
+    <div class="modal-overlay" id="machine-management-modal">
+      <div class="modal" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-handle"></div>
+        <div class="flex items-center justify-between mb-md">
+          <div class="modal-title" style="margin-bottom:0; font-size:1.1rem;">🏋️ 設置マシン一覧・設定</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('machine-management-modal')" style="color:var(--text-muted); font-size:14px;">✕ 閉じる</button>
+        </div>
+        
+        <div class="flex justify-between items-center mb-sm">
+          <p class="text-xs text-muted" style="margin:0;">全 ${machines.length} 台のマシンが登録されています。</p>
+          <button class="btn btn-primary btn-sm" onclick="openMachineConfigModal(null)" style="padding: 4px 10px; font-size: 0.75rem;">＋ 新規マシン追加</button>
+        </div>
+
+        <div style="max-height: 55vh; overflow-y: auto; padding-right: 4px;">
+          ${listHtml}
+        </div>
+
+        <div class="mt-md text-center" style="border-top: 1px solid var(--border-color); padding-top: 10px;">
+          <button class="btn btn-ghost text-xs" style="color:var(--danger)" onclick="resetMachineConfigToDefault()">デフォルトのマシン設定に戻す</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.openMachineConfigModal = function(machineId) {
+  const isNew = !machineId;
+  let machine = null;
+  if (!isNew) {
+    machine = getMachineById(machineId);
+  }
+
+  const defaultMachine = {
+    id: 'machine_' + Date.now(),
+    name: '',
+    category: 'upper',
+    type: 'strength',
+    weights: [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+    description: '',
+    videoUrl: '',
+    hasSets: true
+  };
+
+  const m = machine || defaultMachine;
+  const weightsStr = m.weights && Array.isArray(m.weights) ? m.weights.join(', ') : '';
+
+  const modalHtml = `
+    <div class="modal-overlay" id="machine-config-edit-modal" style="z-index: 250;">
+      <div class="modal" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-handle"></div>
+        <div class="flex items-center justify-between mb-md">
+          <div class="modal-title" style="margin-bottom:0; font-size:1.05rem;">${isNew ? '＋ 新規マシンの追加' : '✏️ ' + m.name + ' の設定'}</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('machine-config-edit-modal')" style="color:var(--text-muted); font-size:14px;">✕</button>
+        </div>
+
+        <input type="hidden" id="edit-machine-id" value="${m.id}">
+        <input type="hidden" id="edit-machine-is-new" value="${isNew ? '1' : '0'}">
+
+        <div class="input-group">
+          <label class="input-label">マシン名 <span style="color:var(--danger)">*</span></label>
+          <input type="text" class="input" id="edit-machine-name" value="${m.name}" placeholder="例: チェストプレス">
+        </div>
+
+        <div class="flex gap-sm">
+          <div class="input-group" style="flex:1;">
+            <label class="input-label">部位カテゴリ</label>
+            <select class="input" id="edit-machine-category">
+              <option value="upper" ${m.category === 'upper' ? 'selected' : ''}>💪 上半身</option>
+              <option value="lower" ${m.category === 'lower' ? 'selected' : ''}>🦵 下半身</option>
+              <option value="core" ${m.category === 'core' ? 'selected' : ''}>🧘 体幹</option>
+              <option value="arm" ${m.category === 'arm' ? 'selected' : ''}>🤜 腕</option>
+              <option value="cardio" ${m.category === 'cardio' ? 'selected' : ''}>🏃 有酸素</option>
+            </select>
+          </div>
+          <div class="input-group" style="flex:1;">
+            <label class="input-label">種別タイプ</label>
+            <select class="input" id="edit-machine-type" onchange="toggleWeightInputArea(this.value)">
+              <option value="strength" ${m.type === 'strength' ? 'selected' : ''}>ウエイト (kg/回数)</option>
+              <option value="cardio" ${m.type === 'cardio' ? 'selected' : ''}>有酸素 (距離/速度/時間)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- ウエイト設定エリア -->
+        <div id="edit-machine-weight-area" style="display: ${m.type === 'cardio' ? 'none' : 'block'}; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 12px; margin-bottom: 12px;">
+          <div class="text-xs font-bold mb-xs" style="color: var(--accent);">⚖️ 重量スタック（利用可能な重量リスト）</div>
+          
+          <!-- 一括自動生成ツール -->
+          <div style="background: var(--bg-elevated); border-radius: var(--radius-sm); padding: 8px 10px; margin-bottom: 8px; font-size: 0.75rem;">
+            <div class="font-bold mb-xs" style="color: var(--text-secondary);">⚡ 3つの数字から一括自動生成</div>
+            <div class="flex gap-xs items-center">
+              <input type="number" step="0.1" class="input text-xs" id="gen-min" placeholder="最小 (例: 5)" style="flex:1; padding:4px 6px;">
+              <input type="number" step="0.1" class="input text-xs" id="gen-second" placeholder="2段目 (例: 10)" style="flex:1; padding:4px 6px;">
+              <input type="number" step="0.1" class="input text-xs" id="gen-max" placeholder="最大 (例: 100)" style="flex:1; padding:4px 6px;">
+              <button type="button" class="btn btn-primary btn-sm" onclick="generateWeightArray()" style="padding:4px 8px; font-size:0.75rem; white-space:nowrap;">生成</button>
+            </div>
+          </div>
+
+          <label class="input-label" style="font-size:0.7rem;">重量リスト（カンマ区切りで直接編集も可能）</label>
+          <textarea class="input text-xs" id="edit-machine-weights" rows="2" placeholder="例: 5, 10, 15, 20, 25, 30...">${weightsStr}</textarea>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">説明・使い方メモ</label>
+          <textarea class="input text-xs" id="edit-machine-desc" rows="2" placeholder="マシンの特徴や使い方のポイント">${m.description || ''}</textarea>
+        </div>
+
+        <div class="input-group">
+          <label class="input-label">YouTube解説動画URL</label>
+          <input type="url" class="input text-xs" id="edit-machine-video" value="${m.videoUrl || ''}" placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+
+        <div class="flex gap-sm mt-lg">
+          <button class="btn btn-secondary" style="flex:1" onclick="closeModalCustom('machine-config-edit-modal')">キャンセル</button>
+          ${!isNew ? `<button class="btn btn-danger" style="flex:1" onclick="deleteMachineConfig('${m.id}')">削除</button>` : ''}
+          <button class="btn btn-primary" style="flex:2" onclick="saveMachineConfig()">保存</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.toggleWeightInputArea = function(type) {
+  const area = document.getElementById('edit-machine-weight-area');
+  if (area) {
+    area.style.display = type === 'cardio' ? 'none' : 'block';
+  }
+};
+
+window.generateWeightArray = function() {
+  const min = parseFloat(document.getElementById('gen-min').value);
+  const second = parseFloat(document.getElementById('gen-second').value);
+  const max = parseFloat(document.getElementById('gen-max').value);
+
+  if (isNaN(min) || isNaN(second) || isNaN(max)) {
+    showToast('最小・2段目・最大をすべて入力してください', 'danger');
+    return;
+  }
+
+  if (second <= min || max <= min) {
+    showToast('2段目と最大値は最小値より大きい値を入力してください', 'danger');
+    return;
+  }
+
+  const step = Math.round((second - min) * 100) / 100;
+  if (step <= 0) {
+    showToast('有効なステップ幅を計算できませんでした', 'danger');
+    return;
+  }
+
+  const result = [];
+  let curr = min;
+  while (curr <= max + 0.001) {
+    result.push(Math.round(curr * 10) / 10);
+    curr += step;
+  }
+
+  document.getElementById('edit-machine-weights').value = result.join(', ');
+  showToast(`全 ${result.length} 段階（${step}kg刻み）の重量リストを生成しました ⚡`, 'success');
+};
+
+window.saveMachineConfig = function() {
+  const id = document.getElementById('edit-machine-id').value;
+  const isNew = document.getElementById('edit-machine-is-new').value === '1';
+  const name = document.getElementById('edit-machine-name').value.trim();
+  const category = document.getElementById('edit-machine-category').value;
+  const type = document.getElementById('edit-machine-type').value;
+  const desc = document.getElementById('edit-machine-desc').value.trim();
+  const videoUrl = document.getElementById('edit-machine-video').value.trim();
+
+  if (!name) {
+    showToast('マシン名を入力してください', 'danger');
+    return;
+  }
+
+  let weights = [];
+  if (type === 'strength') {
+    const rawWeights = document.getElementById('edit-machine-weights').value;
+    weights = rawWeights.split(',')
+      .map(w => parseFloat(w.trim()))
+      .filter(w => !isNaN(w) && w >= 0);
+  }
+
+  const fields = type === 'strength'
+    ? [
+        { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 0.5, min: 0 },
+        { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 0 }
+      ]
+    : [
+        { key: 'distance', label: '距離', unit: 'km', type: 'number', step: 0.1, min: 0 },
+        { key: 'speed', label: '速度', unit: 'km/h', type: 'number', step: 0.1, min: 0 },
+        { key: 'duration', label: '時間', unit: '分', type: 'number', step: 1, min: 0 }
+      ];
+
+  const machines = [...(window.GymneryFacility?.machines || [])];
+  
+  if (isNew) {
+    machines.push({
+      id,
+      name,
+      category,
+      type,
+      fields,
+      weights,
+      hasSets: type === 'strength',
+      description: desc,
+      videoUrl: videoUrl || undefined
+    });
+  } else {
+    const idx = machines.findIndex(m => m.id === id);
+    if (idx !== -1) {
+      machines[idx] = {
+        ...machines[idx],
+        name,
+        category,
+        type,
+        fields,
+        weights,
+        hasSets: type === 'strength',
+        description: desc,
+        videoUrl: videoUrl || undefined
+      };
+    }
+  }
+
+  window.GymneryFacility.machines = machines;
+  localStorage.setItem('custom_machines', JSON.stringify(machines));
+
+  closeModalCustom('machine-config-edit-modal');
+  closeModalCustom('machine-management-modal');
+  showToast(`${name} を保存しました ✅`, 'success');
+  
+  // 設定画面のカード表示とモーダルを再更新
+  const main = document.getElementById('main-content');
+  if (main) renderSettings(main);
+  showMachineManagementList();
+};
+
+window.deleteMachineConfig = function(id) {
+  const machine = getMachineById(id);
+  const name = machine ? machine.name : 'マシン';
+  
+  if (confirm(`「${name}」を削除しますか？\n(過去の記録データは消去されません)`)) {
+    const machines = (window.GymneryFacility?.machines || []).filter(m => m.id !== id);
+    window.GymneryFacility.machines = machines;
+    localStorage.setItem('custom_machines', JSON.stringify(machines));
+
+    closeModalCustom('machine-config-edit-modal');
+    closeModalCustom('machine-management-modal');
+    showToast(`${name} を削除しました`, 'info');
+
+    const main = document.getElementById('main-content');
+    if (main) renderSettings(main);
+    showMachineManagementList();
+  }
+};
+
+window.resetMachineConfigToDefault = function() {
+  if (confirm('マシン設定をすべて初期状態に戻しますか？\n（カスタム追加したマシンや変更した重量設定が元に戻ります）')) {
+    localStorage.removeItem('custom_machines');
+    closeModalCustom('machine-management-modal');
+    loadFacilityConfig().then(() => {
+      showToast('マシン設定をデフォルトに戻しました 🔄', 'success');
+      const main = document.getElementById('main-content');
+      if (main) renderSettings(main);
+    });
+  }
+};
+
