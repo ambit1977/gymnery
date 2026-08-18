@@ -3596,7 +3596,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v82)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v83)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -3911,6 +3911,8 @@ function showMachinePhoto(machineId, returnTarget = 'close') {
   const getReturnAction = () => {
     if (returnTarget === 'select') {
       return 'showMachineSelect();';
+    } else if (returnTarget === 'management') {
+      return 'showMachineManagementList();';
     } else if (returnTarget.startsWith('detail:')) {
       const sid = returnTarget.split(':')[1];
       return `showSessionDetail(${sid});`;
@@ -4877,12 +4879,15 @@ window.showMachineManagementList = function() {
         weightInfo = `<div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 2px;">有酸素マシン (距離/速度/時間)</div>`;
       }
 
-      const mediaBadges = `
-        <span style="font-size: 0.65rem; display: inline-flex; gap: 4px; margin-left: 6px;">
-          ${m.image ? '<span title="写真あり">📷</span>' : ''}
-          ${m.videoUrl ? '<span title="動画あり">🎬</span>' : ''}
+      const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); closeModalCustom('machine-management-modal'); showMachinePhoto('${m.id}', 'management')" style="cursor:pointer; font-size:1.0rem; padding: 2px 4px; border-radius: 4px; background: rgba(255,255,255,0.08);" title="写真・使い方を見る">📷</span>` : '';
+      const videoBtn = m.videoUrl ? `<a href="${m.videoUrl}" target="_blank" onclick="event.stopPropagation();" style="cursor:pointer; font-size:1.0rem; padding: 2px 4px; border-radius: 4px; background: rgba(255,0,0,0.18); text-decoration: none;" title="YouTube解説動画を見る">🎬</a>` : '';
+
+      const mediaBadges = (cameraBtn || videoBtn) ? `
+        <span style="display: inline-flex; align-items: center; gap: 4px; margin-left: 6px;">
+          ${cameraBtn}
+          ${videoBtn}
         </span>
-      `;
+      ` : '';
 
       listHtml += `
         <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; margin-bottom: 6px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color);">
