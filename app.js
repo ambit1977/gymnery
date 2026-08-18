@@ -1326,16 +1326,17 @@ function minimizeExerciseInput() {
     const targetSessionId = modal.dataset.targetSessionId && modal.dataset.targetSessionId !== 'null' ? Number(modal.dataset.targetSessionId) : null;
     saveExerciseDraft(machineId, editExerciseId, targetSessionId);
     closeModal(true);
-    showToast('記録中の状態を保持しました（下部バーから再開可能）', 'info');
+    showToast('休憩中（下部バーからいつでも再開できます）', 'info');
   } else {
     closeModal();
   }
 }
 
 function discardExerciseDraft() {
-  if (confirm('記録中の内容を破棄しますか？')) {
+  if (confirm('この種目の入力を中止しますか？')) {
+    clearLocalIntervalTimer();
     clearExerciseDraft();
-    showToast('下書きを破棄しました', 'info');
+    showToast('入力を中止しました', 'info');
   }
 }
 
@@ -1367,7 +1368,7 @@ function renderActiveExerciseBar() {
     return;
   }
 
-  const draft = window.currentExerciseDraft || { machineId: intervalTimerMachineId };
+  const draft = window.currentExerciseDraft || (intervalTimerMachineId ? { machineId: intervalTimerMachineId } : null);
   const machine = getMachineById(draft.machineId);
   if (!machine) {
     if (bar && typeof bar.remove === 'function') bar.remove();
@@ -1424,7 +1425,7 @@ function renderActiveExerciseBar() {
         </div>
       </div>
       <div class="floating-bar-actions">
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); discardExerciseDraft()" style="color:var(--text-muted); font-size:0.85rem; padding:4px 8px;" title="下書きを破棄">✕</button>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); discardExerciseDraft()" style="color:var(--text-muted); font-size:0.85rem; padding:4px 8px;" title="入力を中止">✕</button>
       </div>
     `;
   };
@@ -1501,7 +1502,7 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     <div style="display:flex; justify-content:space-between; align-items:center; width:100%; margin-bottom:8px;">
       <button class="btn btn-ghost btn-sm" onclick="minimizeExerciseInput()" style="color:var(--accent); font-size:0.8rem; padding:4px 8px; font-weight:bold;">▼ 最小化 (他画面を見る)</button>
       <div class="modal-handle" style="margin:0;"></div>
-      <button class="btn btn-ghost btn-sm" onclick="discardExerciseDraft();closeModal();" style="color:var(--text-muted); font-size:0.75rem; padding:4px 6px;">破棄</button>
+      <button class="btn btn-ghost btn-sm" onclick="discardExerciseDraft();closeModal();" style="color:var(--text-muted); font-size:0.75rem; padding:4px 6px;">✕ 中止</button>
     </div>
     ${timerHeaderHtml}
     <div class="modal-title" style="display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 20px;">
@@ -1546,9 +1547,7 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     html += `</div>`;
   }
 
-  if (hasMatchingDraft) {
-    html += `<div class="text-xs text-muted mt-sm" style="color:var(--accent);">📝 入力中の下書きを復元しました</div>`;
-  } else if (lastData && !editExerciseId) {
+  if (lastData && !editExerciseId) {
     html += `<div class="text-xs text-muted mt-sm">💡 前回の記録を反映しています</div>`;
   }
 
@@ -1582,6 +1581,15 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
   }
 
   showModal(html, true, machineId, editExerciseId, targetSessionId);
+
+  // インターバルタイマーが稼働中の場合は、モーダル内のタイマー表示を即座に再起動・再バインド
+  if (intervalTimerEndTime && intervalTimerMachineId === machineId) {
+    const container = document.getElementById('interval-timer-container');
+    if (container) {
+      container.style.display = 'flex';
+      startIntervalTimer(machineId, true);
+    }
+  }
 }
 
 function renderSetRow(machine, index, data = {}) {
@@ -3653,7 +3661,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v84)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v85)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
