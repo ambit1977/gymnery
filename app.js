@@ -1050,7 +1050,7 @@ async function showMachineSelect() {
         let daysStr = '今日';
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
-          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -1120,7 +1120,7 @@ async function showMachineSelect() {
 
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         html += `
-          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -1186,7 +1186,7 @@ async function showMachineSelect() {
 
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
-          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -3661,7 +3661,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v85)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v86)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
