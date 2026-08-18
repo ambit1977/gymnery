@@ -1,3 +1,5 @@
+let lastViewedSessionId = null;
+let lastViewedSessionDate = null;
 // ========================================
 // app.js - メインアプリケーション
 // ========================================
@@ -1048,7 +1050,7 @@ async function showMachineSelect() {
         let daysStr = '今日';
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
-          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
+          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s; opacity: 0.5; filter: grayscale(50%);">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -1118,7 +1120,7 @@ async function showMachineSelect() {
 
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         html += `
-          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -1184,7 +1186,7 @@ async function showMachineSelect() {
 
         const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}', 'select')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
         const cardHtml = `
-          <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
+          <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer; transition: 0.2s;">
             <div style="display: flex; align-items: center; gap: var(--space-sm);">
               <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
               <div class="machine-info">
@@ -1337,12 +1339,15 @@ function discardExerciseDraft() {
   }
 }
 
+let floatingBarTimerInterval = null;
+
 function renderActiveExerciseBar() {
   let bar = document.getElementById('active-exercise-floating-bar');
   
   // モーダルが開いている時はフローティングバーは非表示
   if (document.querySelector('.modal-overlay')) {
     if (bar && typeof bar.remove === 'function') bar.remove();
+    if (floatingBarTimerInterval) { clearInterval(floatingBarTimerInterval); floatingBarTimerInterval = null; }
     return;
   }
 
@@ -1354,23 +1359,20 @@ function renderActiveExerciseBar() {
     } catch (e) {}
   }
 
-  if (!window.currentExerciseDraft) {
+  // 下書きもなくインターバルタイマーも動いていない場合はバー削除
+  const isTimerRunning = intervalTimerEndTime && intervalTimerEndTime > Date.now();
+  if (!window.currentExerciseDraft && !isTimerRunning) {
     if (bar && typeof bar.remove === 'function') bar.remove();
+    if (floatingBarTimerInterval) { clearInterval(floatingBarTimerInterval); floatingBarTimerInterval = null; }
     return;
   }
 
-  const draft = window.currentExerciseDraft;
+  const draft = window.currentExerciseDraft || { machineId: intervalTimerMachineId };
   const machine = getMachineById(draft.machineId);
   if (!machine) {
     if (bar && typeof bar.remove === 'function') bar.remove();
+    if (floatingBarTimerInterval) { clearInterval(floatingBarTimerInterval); floatingBarTimerInterval = null; }
     return;
-  }
-
-  let subText = '';
-  if (draft.type === 'strength' && Array.isArray(draft.data)) {
-    subText = `${draft.data.length}セット入力中 • タップして再開`;
-  } else {
-    subText = '入力中 • タップして再開';
   }
 
   if (!bar) {
@@ -1380,21 +1382,59 @@ function renderActiveExerciseBar() {
     document.body.appendChild(bar);
   }
 
-  bar.innerHTML = `
-    <div class="floating-bar-info" onclick="openExerciseInput('${draft.machineId}', ${draft.editExerciseId ? draft.editExerciseId : 'null'}, ${draft.targetSessionId ? draft.targetSessionId : 'null'}, true)">
-      <div class="floating-bar-icon">${getCategoryIcon(machine.category)}</div>
-      <div class="floating-bar-text">
-        <div class="floating-bar-title">
-          <span>${machine.name}</span>
-          <span class="badge" style="background:var(--accent)22; color:var(--accent); font-size:0.65rem; padding:1px 5px;">記録中</span>
+  const updateBarContent = () => {
+    const currentBar = document.getElementById('active-exercise-floating-bar');
+    if (!currentBar) {
+      if (floatingBarTimerInterval) { clearInterval(floatingBarTimerInterval); floatingBarTimerInterval = null; }
+      return;
+    }
+
+    const now = Date.now();
+    let timerBadge = '';
+    let subText = '';
+
+    if (intervalTimerEndTime && intervalTimerEndTime > now) {
+      const remainMs = intervalTimerEndTime - now;
+      const rM = Math.floor(remainMs / 60000);
+      const rS = Math.floor((remainMs % 60000) / 1000);
+      const timerStr = `${String(rM).padStart(2,'0')}:${String(rS).padStart(2,'0')}`;
+      timerBadge = `<span class="badge" style="background:#ff6b6b; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 6px; animation:pulseIcon 1.5s infinite;">⏱️ ${timerStr}</span>`;
+      subText = `<span style="color:#ff6b6b; font-weight:bold;">インターバル計測中</span> • タップして再開`;
+    } else if (intervalTimerEndTime && intervalTimerEndTime <= now && (now - intervalTimerEndTime < 30000)) {
+      timerBadge = `<span class="badge" style="background:#10b981; color:#fff; font-size:0.75rem; font-weight:bold; padding:2px 6px;">⏱️ 終了！</span>`;
+      subText = `<span style="color:#10b981; font-weight:bold;">インターバル終了</span> • 次のセットへ`;
+    } else {
+      timerBadge = `<span class="badge" style="background:var(--accent)22; color:var(--accent); font-size:0.65rem; padding:1px 5px;">記録中</span>`;
+      if (draft.type === 'strength' && Array.isArray(draft.data)) {
+        subText = `${draft.data.length}セット入力中 • タップして再開`;
+      } else {
+        subText = '入力中 • タップして再開';
+      }
+    }
+
+    currentBar.innerHTML = `
+      <div class="floating-bar-info" onclick="openExerciseInput('${draft.machineId}', ${draft.editExerciseId ? draft.editExerciseId : 'null'}, ${draft.targetSessionId ? draft.targetSessionId : 'null'}, true)">
+        <div class="floating-bar-icon">${getCategoryIcon(machine.category)}</div>
+        <div class="floating-bar-text">
+          <div class="floating-bar-title">
+            <span>${machine.name}</span>
+            ${timerBadge}
+          </div>
+          <div class="floating-bar-sub">${subText}</div>
         </div>
-        <div class="floating-bar-sub">${subText}</div>
       </div>
-    </div>
-    <div class="floating-bar-actions">
-      <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); discardExerciseDraft()" style="color:var(--text-muted); font-size:0.85rem; padding:4px 8px;" title="下書きを破棄">✕</button>
-    </div>
-  `;
+      <div class="floating-bar-actions">
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation(); discardExerciseDraft()" style="color:var(--text-muted); font-size:0.85rem; padding:4px 8px;" title="下書きを破棄">✕</button>
+      </div>
+    `;
+  };
+
+  updateBarContent();
+
+  if (intervalTimerEndTime && intervalTimerEndTime > Date.now()) {
+    if (floatingBarTimerInterval) clearInterval(floatingBarTimerInterval);
+    floatingBarTimerInterval = setInterval(updateBarContent, 500);
+  }
 }
 
 async function openExerciseInput(machineId, editExerciseId = null, targetSessionId = null, isRestore = false) {
@@ -1836,7 +1876,7 @@ function showModal(contentHtml, isExercise = false, machineId = null, editExerci
 }
 
 function closeModal(skipDraftClear = false) {
-  clearLocalIntervalTimer();
+  // 注意: インターバルタイマーは最小化中も継続動作させるため、ここではクリアしない
 
   const overlay = document.querySelector('.modal-overlay');
   if (overlay) overlay.remove();
@@ -1850,6 +1890,11 @@ function closeModal(skipDraftClear = false) {
 // ========================================
 async function showSessionDetail(sessionId) {
   const session = await getSession(sessionId);
+  if (session && session.startTime) {
+    lastViewedSessionId = sessionId;
+    lastViewedSessionDate = new Date(session.startTime);
+    calendarDate = new Date(lastViewedSessionDate.getFullYear(), lastViewedSessionDate.getMonth(), 1);
+  }
   const exercises = await getExercisesBySession(sessionId);
   const main = document.getElementById('main-content');
 
@@ -2259,7 +2304,7 @@ async function renderSessionsTab(container) {
     }
 
     listHtml += `
-      <div class="history-item" onclick="showSessionDetail(${s.id})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
+      <div class="history-item" id="session-card-${s.id}" onclick="showSessionDetail(${s.id})" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
         <div class="history-date" style="display: flex; flex-direction: column; align-items: center; justify-content: center; width: 50px; border-right: 1px solid var(--border-color); padding-right: 8px; margin-right: 12px;">
           <div class="history-day" style="font-size: 1.25rem; font-weight: bold;">${d.getDate()}</div>
           <div class="history-month" style="font-size: 0.7rem; color: var(--text-secondary);">${d.getMonth()+1}月</div>
@@ -2296,7 +2341,19 @@ async function renderSessionsTab(container) {
   setTimeout(() => {
     setupStickyCalendarShadow();
     setupHistoryIntersectionObserver();
-  }, 100);
+
+    // 過去セッション詳細を見て戻ってきた場合、そのカードの位置へスクロール復帰
+    if (lastViewedSessionId) {
+      const targetId = lastViewedSessionId;
+      const card = document.getElementById(`session-card-${targetId}`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card.style.transition = 'box-shadow 0.3s ease';
+        card.style.boxShadow = '0 0 14px var(--accent)';
+        setTimeout(() => { if (card) card.style.boxShadow = ''; }, 1500);
+      }
+    }
+  }, 150);
 }
 
 async function renderTrainerTab(container) {
@@ -2618,7 +2675,7 @@ async function renderMachinesTab(container) {
 
     const cameraBtn = m.image ? `<span onclick="event.stopPropagation(); showMachinePhoto('${m.id}')" style="cursor:pointer; font-size:1.0rem; padding: 4px; background:var(--bg-secondary); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;" title="写真を見る">📷</span>` : '';
     listHtml += `
-      <div class="machine-card" onclick="openExerciseInput('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
+      <div class="machine-card" onclick="showMachineHistoryModal('${m.id}')" style="display: flex; align-items: center; justify-content: space-between; padding: 12px; margin-bottom: 8px; background: var(--bg-card); border-radius: var(--radius-md); border: 1px solid var(--border-color); cursor: pointer;">
         <div style="display: flex; align-items: center; gap: var(--space-sm);">
           <div class="machine-icon" style="background:${getCategoryColor(m.category)}22; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 50%;">${getCategoryIcon(m.category)}</div>
           <div class="machine-info">
@@ -3596,7 +3653,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v83)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v84)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -5178,3 +5235,98 @@ window.resetMachineConfigToDefault = function() {
   }
 };
 
+
+
+// ========================================
+// 種目ごとの詳細履歴モーダル (全セット・負荷一覧)
+// ========================================
+window.showMachineHistoryModal = async function(machineId) {
+  const machine = getMachineById(machineId);
+  if (!machine) return;
+
+  const exercises = await getExercisesByMachine(machineId);
+  for (const e of exercises) {
+    e._resolvedDate = await getExerciseDate(e);
+  }
+  
+  // 日付新しい順にソート
+  exercises.sort((a, b) => b._resolvedDate - a._resolvedDate);
+
+  let historyCardsHtml = '';
+  if (exercises.length === 0) {
+    historyCardsHtml = `<div class="empty-state" style="padding: 24px 0;"><div class="empty-icon">📝</div><div class="empty-text">この種目の記録はまだありません</div></div>`;
+  } else {
+    for (const ex of exercises) {
+      const d = ex._resolvedDate;
+      const dateStr = `${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日 (${getDayOfWeek(d.toISOString())})`;
+      const modeBadge = ex.saveMode ? `<span class="badge" style="background:var(--bg-elevated); color:var(--text-secondary); font-size:0.65rem; padding:2px 6px;">${ex.saveMode === 'ok' ? 'UP↑' : '維持→'}</span>` : '';
+      const noteHtml = ex.note ? `<div class="text-xs text-muted mt-xs" style="background:var(--bg-secondary); padding:4px 8px; border-radius:4px;">💡 ${ex.note}</div>` : '';
+
+      let setsContent = '';
+      if (ex.type === 'strength' && Array.isArray(ex.data)) {
+        let rows = '';
+        ex.data.forEach((s, idx) => {
+          rows += `
+            <div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0; border-bottom:1px solid rgba(255,255,255,0.04); font-size:0.85rem;">
+              <span style="color:var(--text-secondary); font-weight:bold; width:50px;">Set ${idx + 1}</span>
+              <span style="font-weight:bold; color:var(--text-primary);">${s.weight || 0} kg</span>
+              <span style="color:var(--accent); font-weight:bold;">${s.reps || 0} 回</span>
+            </div>
+          `;
+        });
+        setsContent = `<div style="margin-top:6px;">${rows}</div>`;
+      } else if (ex.data) {
+        let stats = [];
+        if (ex.data.distance) stats.push(`距離: ${ex.data.distance} km`);
+        if (ex.data.speed) stats.push(`速度: ${ex.data.speed} km/h`);
+        if (ex.data.duration) stats.push(`時間: ${ex.data.duration} 分`);
+        if (ex.data.resistance) stats.push(`負荷: レベル ${ex.data.resistance}`);
+        setsContent = `<div style="font-size:0.85rem; color:var(--text-primary); font-weight:bold; margin-top:4px;">${stats.join(' · ')}</div>`;
+      }
+
+      historyCardsHtml += `
+        <div class="card mb-sm" style="background:var(--bg-card); border:1px solid var(--border-color); padding:10px 14px;">
+          <div class="flex items-center justify-between" style="border-bottom:1px solid var(--border-color); padding-bottom:6px;">
+            <div class="text-xs font-bold" style="color:var(--text-primary);">${dateStr}</div>
+            ${modeBadge}
+          </div>
+          ${setsContent}
+          ${noteHtml}
+        </div>
+      `;
+    }
+  }
+
+  const cameraBtn = machine.image ? `<span onclick="showMachinePhoto('${machine.id}')" style="cursor:pointer; font-size:1.0rem; padding: 2px 6px; background:var(--bg-secondary); border-radius:4px; margin-left:6px;" title="写真を見る">📷</span>` : '';
+  const videoBtn = machine.videoUrl ? `<a href="${machine.videoUrl}" target="_blank" style="cursor:pointer; font-size:1.0rem; padding: 2px 6px; background:var(--bg-secondary); border-radius:4px; margin-left:4px; text-decoration:none;" title="動画を見る">🎬</a>` : '';
+
+  const modalHtml = `
+    <div class="modal-overlay" id="machine-history-modal">
+      <div class="modal" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-handle"></div>
+        <div class="flex items-center justify-between mb-md">
+          <div class="modal-title" style="margin-bottom:0; font-size:1.05rem; display:flex; align-items:center;">
+            <span style="color:${getCategoryColor(machine.category)}; margin-right:6px;">${getCategoryIcon(machine.category)}</span>
+            <span>${machine.name} の履歴</span>
+            ${cameraBtn}
+            ${videoBtn}
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('machine-history-modal')" style="color:var(--text-muted); font-size:14px;">✕ 閉じる</button>
+        </div>
+
+        <div style="font-size:0.75rem; color:var(--text-secondary); margin-bottom:12px;">過去 ${exercises.length} 回の実施ログ（各セットの負荷・回数）</div>
+
+        <div style="max-height: 55vh; overflow-y: auto; padding-right: 2px;">
+          ${historyCardsHtml}
+        </div>
+
+        <div class="flex gap-sm mt-md" style="border-top:1px solid var(--border-color); padding-top:10px;">
+          <button class="btn btn-secondary" style="flex:1" onclick="closeModalCustom('machine-history-modal')">閉じる</button>
+          <button class="btn btn-primary" style="flex:1" onclick="closeModalCustom('machine-history-modal'); openExerciseInput('${machine.id}')">＋ この種目を記録</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
