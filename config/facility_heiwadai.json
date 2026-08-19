@@ -1,0 +1,291 @@
+{
+  "id": "heiwadai",
+  "name": "平和台体育館",
+  "address": "練馬区平和台2-12-5",
+  "phone": "03-5920-3411",
+  "openHours": "午前9時 〜 午後9時30分",
+  "receptionHours": "午前9時 〜 午後5時（年末年始・休館日を除く）",
+  "closedDays": "毎月第2月曜日（祝日の場合は翌平日）、年末年始（12月29日 〜 1月3日） ※臨時休館日あり",
+  "gymTarget": "練馬区内在住・在勤・在学の15歳以上（中学生除く）",
+  "gymHours": [
+    "9:00 〜 21:30（最終入場 21:00）"
+  ],
+  "gymFee": [
+    "一般：2時間 200円",
+    "65歳〜74歳：2時間 100円",
+    "75歳以上：無料",
+    "障害者：一般料金の半額（介助者1名半額）"
+  ],
+  "gymBelongings": "トレーニングウェア、室内用シューズ、汗拭きタオル、本人確認書類",
+  "gymProcedure": "券売機で利用券を購入し、トレーニング室受付にお出しください。初回の方は初回説明を受けてください。",
+  "gymNotes": [
+    "筋力系機器8台、有酸素系機器11台、フリーウエイトエリア、ストレッチエリア完備。",
+    "更衣室、シャワー、コインロッカーあり。"
+  ],
+  "categories": {
+    "upper": {
+      "label": "上半身",
+      "icon": "💪",
+      "color": "#4ecdc4"
+    },
+    "lower": {
+      "label": "下半身",
+      "icon": "🦵",
+      "color": "#ff6b6b"
+    },
+    "core": {
+      "label": "体幹",
+      "icon": "🧘",
+      "color": "#ffe66d"
+    },
+    "arm": {
+      "label": "腕",
+      "icon": "🤜",
+      "color": "#a855f7"
+    },
+    "cardio": {
+      "label": "有酸素",
+      "icon": "🏃",
+      "color": "#38bdf8"
+    }
+  },
+  "machines": [
+    {
+      "id": "chest_press",
+      "name": "チェストプレス",
+      "category": "upper",
+      "type": "strength",
+      "fields": [
+        {
+          "key": "weight",
+          "label": "重量",
+          "unit": "kg",
+          "type": "number",
+          "step": 0.5,
+          "min": 0
+        },
+        {
+          "key": "reps",
+          "label": "回数",
+          "unit": "回",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
+      ],
+      "weights": [
+        5.0,
+        10.0,
+        15.0,
+        20.0,
+        25.0,
+        30.0,
+        35.0,
+        40.0,
+        45.0,
+        50.0,
+        55.0,
+        60.0,
+        65.0,
+        70.0,
+        75.0,
+        80.0,
+        85.0,
+        90.0,
+        95.0,
+        100.0
+      ],
+      "hasSets": true,
+      "description": "胸（大胸筋）を鍛えるマシンです。"
+    },
+    {
+      "id": "lat_pulldown",
+      "name": "ラットプルダウン",
+      "category": "upper",
+      "type": "strength",
+      "fields": [
+        {
+          "key": "weight",
+          "label": "重量",
+          "unit": "kg",
+          "type": "number",
+          "step": 0.5,
+          "min": 0
+        },
+        {
+          "key": "reps",
+          "label": "回数",
+          "unit": "回",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
+      ],
+      "weights": [
+        5.0,
+        10.0,
+        15.0,
+        20.0,
+        25.0,
+        30.0,
+        35.0,
+        40.0,
+        45.0,
+        50.0,
+        55.0,
+        60.0,
+        65.0,
+        70.0,
+        75.0,
+        80.0,
+        85.0,
+        90.0,
+        95.0,
+        100.0
+      ],
+      "hasSets": true,
+      "description": "背中（広背筋）を鍛えるマシンです。"
+    },
+    {
+      "id": "leg_press",
+      "name": "レッグプレス",
+      "category": "lower",
+      "type": "strength",
+      "fields": [
+        {
+          "key": "weight",
+          "label": "重量",
+          "unit": "kg",
+          "type": "number",
+          "step": 0.5,
+          "min": 0
+        },
+        {
+          "key": "reps",
+          "label": "回数",
+          "unit": "回",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
+      ],
+      "weights": [
+        10.0,
+        20.0,
+        30.0,
+        40.0,
+        50.0,
+        60.0,
+        70.0,
+        80.0,
+        90.0,
+        100.0,
+        110.0,
+        120.0,
+        130.0,
+        140.0,
+        150.0,
+        160.0,
+        170.0,
+        180.0,
+        190.0,
+        200.0
+      ],
+      "hasSets": true,
+      "description": "太もも・お尻を鍛えるマシンです。"
+    },
+    {
+      "id": "abdominal",
+      "name": "アブドミナル",
+      "category": "core",
+      "type": "strength",
+      "fields": [
+        {
+          "key": "weight",
+          "label": "重量",
+          "unit": "kg",
+          "type": "number",
+          "step": 0.5,
+          "min": 0
+        },
+        {
+          "key": "reps",
+          "label": "回数",
+          "unit": "回",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
+      ],
+      "weights": [
+        5.0,
+        10.0,
+        15.0,
+        20.0,
+        25.0,
+        30.0,
+        35.0,
+        40.0,
+        45.0,
+        50.0,
+        55.0,
+        60.0
+      ],
+      "hasSets": true,
+      "description": "お腹を鍛えるマシンです。"
+    },
+    {
+      "id": "treadmill",
+      "name": "トレッドミル",
+      "category": "cardio",
+      "type": "cardio",
+      "fields": [
+        {
+          "key": "distance",
+          "label": "距離",
+          "unit": "km",
+          "type": "number",
+          "step": 0.1,
+          "min": 0
+        },
+        {
+          "key": "speed",
+          "label": "速度",
+          "unit": "km/h",
+          "type": "number",
+          "step": 0.1,
+          "min": 0
+        }
+      ],
+      "hasSets": false,
+      "description": "有酸素ランニングマシンです。"
+    },
+    {
+      "id": "bike",
+      "name": "エアロバイク",
+      "category": "cardio",
+      "type": "cardio",
+      "fields": [
+        {
+          "key": "resistance",
+          "label": "負荷",
+          "unit": "レベル",
+          "type": "number",
+          "step": 1,
+          "min": 1,
+          "max": 20
+        },
+        {
+          "key": "duration",
+          "label": "時間",
+          "unit": "分",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
+      ],
+      "hasSets": false,
+      "description": "有酸素バイクです。"
+    }
+  ]
+}

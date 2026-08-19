@@ -1,4 +1,24 @@
 
+window.switchFacilityPreset = function(facilityId) {
+  if (!facilityId) return;
+  const presets = {
+    'asahicho': '旭町南地区区民館',
+    'hikarigaoka': '光が丘体育館',
+    'nerima_sougou': '練馬区立総合体育館',
+    'heiwadai': '平和台体育館',
+    'kamishakujii': '上石神井体育館'
+  };
+  const name = presets[facilityId] || facilityId;
+  if (confirm(`施設プリセットを「${name}」に切り替えますか？`)) {
+    localStorage.removeItem('custom_facility_info');
+    localStorage.removeItem('custom_machines');
+    localStorage.setItem('selected_facility_preset', facilityId);
+    const url = new URL(window.location.href);
+    url.searchParams.set('facility', facilityId);
+    window.location.href = url.toString();
+  }
+};
+
 // 種目履歴フィルター用グローバルステート
 window.machineHistoryFilterCategory = 'all';
 window.machineHistoryFilterMuscle = null;
@@ -47,7 +67,7 @@ window.GymneryFacility = null;
 async function loadFacilityConfig() {
   const urlParams = new URLSearchParams(window.location.search);
   const configUrl = urlParams.get('config');
-  const facilityId = urlParams.get('facility') || 'asahicho';
+  const facilityId = urlParams.get('facility') || localStorage.getItem('selected_facility_preset') || 'asahicho';
 
   let configData = null;
 
@@ -499,10 +519,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  // Initialize default member ID C- if not present
-  if (!localStorage.getItem('member_id')) {
-    localStorage.setItem('member_id', 'C-');
-  }
+  // Initialize default member ID (blank by default)
+  // If not set, user will be prompted to enter on tap.
 
   // Handle body composition URL parameters (Shortcut integration)
   await handleUrlParamsImport();
@@ -883,18 +901,21 @@ async function renderHome(main) {
     localStorage.setItem('custom_checklist', JSON.stringify(checklistItems));
   }
 
-  const memberId = localStorage.getItem('member_id') || 'C-';
+  const memberId = localStorage.getItem('member_id') || '';
+  const memberIdDisplay = memberId
+    ? `<div class="text-lg font-bold" style="color: var(--accent); font-family: monospace; letter-spacing: 1px; font-size: 1.4rem;">${memberId}</div>`
+    : `<div class="text-xs" style="color: var(--accent); font-weight: bold; border: 1px dashed var(--accent); padding: 3px 8px; border-radius: 6px; margin-top: 2px;">未設定 (登録)</div>`;
 
-  // 会員証カードHTML
+  // 会員証・利用番号カードHTML
   const memberCardHtml = `
-    <div class="card mb-md" onclick="editMemberId()" style="cursor: pointer; background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%); border: 1px solid var(--accent-glow); padding: 16px; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius-md);" title="タップして会員番号を編集">
+    <div class="card mb-md" onclick="editMemberId()" style="cursor: pointer; background: linear-gradient(135deg, var(--bg-card) 0%, var(--bg-card-hover) 100%); border: 1px solid var(--accent-glow); padding: 16px; display: flex; align-items: center; justify-content: space-between; border-radius: var(--radius-md);" title="タップして利用番号・記号を編集">
       <div>
         <div class="text-xs text-muted" style="letter-spacing: 1px;">MEMBERSHIP CARD</div>
-        <div class="text-md font-bold mt-xs" style="color: var(--text-primary); font-size: 1.1rem;">練馬区利用証</div>
+        <div class="text-md font-bold mt-xs" style="color: var(--text-primary); font-size: 1.05rem;">利用番号・記号</div>
       </div>
       <div class="text-right">
-        <div class="text-xs text-muted">会員番号 ✏️</div>
-        <div class="text-lg font-bold" style="color: var(--accent); font-family: monospace; letter-spacing: 1px; font-size: 1.4rem;">${memberId}</div>
+        <div class="text-xs text-muted">受付番号 ✏️</div>
+        ${memberIdDisplay}
       </div>
     </div>
   `;
@@ -3662,8 +3683,18 @@ function renderSettings(main) {
     <div class="page">
       <div class="card mb-md" style="line-height: 1.6;">
         <div class="text-sm font-bold mb-xs flex justify-between items-center">
-          <span>📍 施設情報</span>
-          <button class="btn btn-ghost btn-sm" onclick="editFacilityInfo()" style="padding: 2px 6px;">✏️ 編集</button>
+          <span>📍 施設情報・プリセット切替</span>
+          <button class="btn btn-ghost btn-sm" onclick="editFacilityInfo()" style="padding: 2px 6px;">✏️ 手動編集</button>
+        </div>
+        <div class="mb-sm">
+          <label class="text-xs text-muted">プリセット施設切替:</label>
+          <select class="input text-xs mt-xs" onchange="switchFacilityPreset(this.value)" style="width:100%;">
+            <option value="asahicho" ${(!localStorage.getItem('selected_facility_preset') || localStorage.getItem('selected_facility_preset') === 'asahicho') ? 'selected' : ''}>🏛️ 旭町南地区区民館 (デフォルト)</option>
+            <option value="hikarigaoka" ${localStorage.getItem('selected_facility_preset') === 'hikarigaoka' ? 'selected' : ''}>🏢 光が丘体育館</option>
+            <option value="nerima_sougou" ${localStorage.getItem('selected_facility_preset') === 'nerima_sougou' ? 'selected' : ''}>🏟️ 練馬区立総合体育館</option>
+            <option value="heiwadai" ${localStorage.getItem('selected_facility_preset') === 'heiwadai' ? 'selected' : ''}>🏢 平和台体育館</option>
+            <option value="kamishakujii" ${localStorage.getItem('selected_facility_preset') === 'kamishakujii' ? 'selected' : ''}>🏢 上石神井体育館</option>
+          </select>
         </div>
         <div class="text-sm font-bold">${FACILITY.name}</div>
         <div class="text-xs text-muted mb-sm">${FACILITY.address} (☎ ${FACILITY.phone})</div>
@@ -3712,10 +3743,10 @@ function renderSettings(main) {
       </div>
 
       <div class="card mb-md">
-        <div class="text-sm font-bold mb-sm">🪪 会員番号設定</div>
-        <p class="text-xs text-muted mb-md">受付用の会員番号（利用証番号）を登録します。</p>
+        <div class="text-sm font-bold mb-sm">🪪 利用番号・記号設定</div>
+        <p class="text-xs text-muted mb-md">受付用の利用番号・記号（利用証番号等）を登録します。</p>
         <div class="flex gap-sm">
-          <input type="text" class="input text-xs" id="setting-member-id" value="${localStorage.getItem('member_id') || 'C-'}" placeholder="C-" style="flex:2;">
+          <input type="text" class="input text-xs" id="setting-member-id" value="${localStorage.getItem('member_id') || ''}" placeholder="例: C-41、1234 等" style="flex:2;">
           <button class="btn btn-primary btn-sm" onclick="saveSettingMemberId()" style="flex:1;">保存</button>
         </div>
       </div>
@@ -3762,7 +3793,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v88)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v89)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4573,8 +4604,8 @@ window.toggleHelpAccordion = function(btn) {
 
 
 window.editMemberId = function() {
-  const current = localStorage.getItem('member_id') || 'C-';
-  const res = prompt('会員番号を入力してください:', current);
+  const current = localStorage.getItem('member_id') || '';
+  const res = prompt('利用番号・記号を入力してください (例: C-41、1234 等):', current);
   if (res !== null) {
     localStorage.setItem('member_id', res);
     const main = document.getElementById('main-content');

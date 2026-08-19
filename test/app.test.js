@@ -115,7 +115,7 @@ describe('UI Rendering (app.js)', () => {
 
     expect(mockMain.innerHTML).toContain('💪 トレーニング開始');
     expect(mockMain.innerHTML).toContain('持ち物チェックリスト');
-    expect(mockMain.innerHTML).toContain('利用証');
+    expect(mockMain.innerHTML).toContain('利用番号・記号');
   });
 
   it('should render settings screen with facility details', () => {
@@ -124,7 +124,7 @@ describe('UI Rendering (app.js)', () => {
 
     expect(mockMain.innerHTML).toContain('📍 施設情報');
     expect(mockMain.innerHTML).toContain('テスト区民館');
-    expect(mockMain.innerHTML).toContain('会員番号設定');
+    expect(mockMain.innerHTML).toContain('利用番号・記号設定');
   });
 
   it('should render stats screen with muscle map', async () => {
