@@ -2560,7 +2560,7 @@ async function renderTrainerTab(container) {
         <div style="font-size: 3rem; margin-bottom: 12px;">🤖</div>
         <div class="text-md font-bold mb-sm">AI専属トレーナー</div>
         <p class="text-xs text-muted mb-lg" style="line-height: 1.6;">
-          過去のトレーニング履歴（過去1ヶ月・最大10セッション分）と体組成データを分析し、あなた専用のトレーニング評価やアドバイスを提供します。<br>
+          これまでの全トレーニング履歴と最新の体組成データを分析し、あなた専用のトレーニング評価やアドバイスを提供します。<br>
           ご利用には <b>Gemini APIキー</b> の設定が必要です。
         </p>
         <button class="btn btn-primary btn-block" onclick="navigateTo('settings')">⚙️ 設定画面でAPIキーを登録する</button>
@@ -2593,7 +2593,7 @@ async function renderTrainerTab(container) {
         <span style="font-size: 1.8rem;">💪</span>
         <div style="flex:1;">
           <div class="text-sm font-bold">AI専属トレーナーに相談</div>
-          <p class="text-xs text-muted" style="font-size: 0.65rem;">過去30日間の全トレーニング履歴を基にアドバイスを生成します</p>
+          <p class="text-xs text-muted" style="font-size: 0.65rem;">これまでの全トレーニング履歴と前回の指導内容を基にアドバイスを生成します</p>
         </div>
       </div>
       
@@ -2661,19 +2661,20 @@ async function generateTrainerAdvice() {
   }
 
   try {
-    loadingStatus.textContent = 'トレーニング履歴を収集中... 📊';
+    loadingStatus.textContent = '全トレーニング履歴を収集中... 📊';
     const allSessions = await getAllSessions();
-    const oneMonthAgo = Date.now() - 30 * 24 * 60 * 60 * 1000;
     
-    // 過去30日間の全セッションを取得（件数制限なし）
+    // 完了している全セッションを取得（過去30日制限を撤廃して全期間）
     const targetSessions = allSessions.filter(s => {
-      const time = new Date(s.startTime).getTime();
       if (s.id === activeSessionId && !s.endTime) return false;
-      return time >= oneMonthAgo;
+      return true;
     });
 
+    // 日時昇順（古い順）に並べて成長軌跡をAIが分析できるようにする
+    targetSessions.sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+
     if (targetSessions.length === 0) {
-      throw new Error('過去30日以内に完了したトレーニング履歴が見つかりません。まずはトレーニングを記録してください。');
+      throw new Error('完了したトレーニング履歴が見つかりません。まずはトレーニングを記録してください。');
     }
 
     loadingStatus.textContent = '詳細データを解析中... 🔍';
@@ -2683,7 +2684,7 @@ async function generateTrainerAdvice() {
       const dateStr = new Date(s.startTime).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
       sessionsPromptText += `■ セッション日時: ${dateStr}\n`;
       sessionsPromptText += `施設: ${s.facility || window.GymneryFacility?.name || 'トレーニング室'}\n`;
-      if (s.note) sessionsPromptText += `セッションメモ: ${s.note}\n`;
+      if (s.note) sessionsPromptText += `セッション全体の感想・メモ: ${s.note}\n`;
       sessionsPromptText += `実施した種目:\n`;
       
       for (const ex of exs) {
@@ -2694,16 +2695,16 @@ async function generateTrainerAdvice() {
             const exName = set.exercise ? ` (${set.exercise})` : '';
             return `  - ${idx + 1}セット目: ${set.weight || 0}kg x ${set.reps || 0}回${exName}`;
           }).join('\n');
-          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}:\n${setsStr}\n`;
+          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || (machine ? machine.name : ex.machineId)}:\n${setsStr}\n`;
         } else if (machine?.type === 'cardio') {
           // マシンごとのフィールド構成に合わせて動的にテキスト化
           const fieldsText = machine.fields ? machine.fields.map(f => {
             const val = ex.data[f.key] !== undefined ? ex.data[f.key] : '0';
             return `${f.label}: ${val}${f.unit || ''}`;
           }).join(', ') : '';
-          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || machine.name}: ${fieldsText}\n`;
+          sessionsPromptText += `- [${categoryLabel}] ${ex.machineName || (machine ? machine.name : ex.machineId)}: ${fieldsText}\n`;
         }
-        if (ex.note) sessionsPromptText += `  メモ: ${ex.note}\n`;
+        // マシンの調整用メモ (ex.note) は除外
       }
       sessionsPromptText += '\n';
     }
@@ -2725,30 +2726,38 @@ async function generateTrainerAdvice() {
 1. 「〇〇さん」や「[ユーザー名]」などのダミーの三人称やプレースホルダー表現は、回答内で絶対に記述しないでください。
 2. ユーザーに対しては、名前を呼ばずに二人称（あなた）または親しみやすい専属トレーナーとしての語り口調（例：「お疲れ様です！今日のトレーニングは〜」）で直接語りかけるように回答を作成してください。`;
     
-    const userPrompt = `以下のデータを分析し、アドバイスを作成してください。
+    const cachedPreviousAdvice = localStorage.getItem('gemini_last_advice');
+    let previousAdviceSection = '';
+    if (cachedPreviousAdvice) {
+      previousAdviceSection = `\n【前回のAIトレーナーからのアドバイス】\n${cachedPreviousAdvice}\n`;
+    }
+
+    const userPrompt = `以下のデータを分析し、専属トレーナーとして継続的で具体的なアドバイスを作成してください。
 
 【ユーザーの目的・目標・要望】
 ${userGoal}
 
 【最新の体組成データ】
 ${bodyCompPromptText}
-
-【過去30日間の全トレーニング履歴 (全${targetSessions.length}セッション)】
+${previousAdviceSection}
+【これまでの全トレーニング履歴 (全${targetSessions.length}セッション・時系列)】
 ${sessionsPromptText}
 
 【回答フォーマット】
 以下の見出し（###）を使って、Markdown形式で出力してください。見出し以外の行には余分なマークダウン記号（*など）を使わずシンプルに説明してください。
-### 📊 直近のトレーニング総評
-提供された期間全体の合計セッション数・頻度（週何回ペースか）、実施部位のバランス（上半身・下半身・体幹など）、トレーニング構成についての総評。
+※前回の指導内容がある場合は、その後のトレーニングでの変化や成長、アドバイスが実践できているかにも触れてください。
 
-### 💪 良かったポイント
-実施した内容の中で、特に優れている点や継続できている良い点（例：セット数の維持、徐々に重量が上がっている、定期的に通えている等）。
+### 📊 トレーニング履歴の総評と成長
+これまでの通算セッション数・頻度（ペース）、これまでの重量やセット数の推移（成長の傾向）、実施部位のバランスについての総評。
 
-### 🎯 今後のアドバイス・改善プラン
-ユーザーの目的・目標を踏まえ、次回のメニュー構成や強度の上げ方（プログレッシブ・オーバーロードの意識など）、食事や有酸素運動の取り入れ方など、具体的で実践しやすい目標。
+### 💪 良かったポイント・成長した点
+これまでの記録から見える特に優れている点や重量・回数の向上、継続できている良い点。
+
+### 🎯 今後のアドバイス・次回のメニュー改善
+ユーザーの目標を踏まえた、次回のメニュー構成や強度の上げ方（プログレッシブ・オーバーロード）、部位バランスの調整や有酸素・休息のアドバイス。
 
 ### 💬 トレーナーからのメッセージ
-ユーザーのモチベーションを引き出す力強いひと言。`;
+ユーザーのモチベーションを引き出す力強い励ましのひと言。`;
 
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -3927,7 +3936,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v93)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v94)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
