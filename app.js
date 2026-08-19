@@ -1,4 +1,118 @@
 
+// ========================================
+// 施設データ共有・コミュニティ貢献機能 (Phase 2)
+// ========================================
+window.openFacilityShareModal = function() {
+  const fac = window.GymneryFacility || {};
+  const machineCount = fac.machines ? fac.machines.length : 0;
+  const currentNick = localStorage.getItem('contributor_nickname') || '';
+
+  const modalHtml = `
+    <div class="modal-overlay active" id="facility-share-modal" onclick="closeModalCustom('facility-share-modal')">
+      <div class="modal-content" onclick="event.stopPropagation()" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-handle"></div>
+        <div class="flex items-center justify-between mb-md">
+          <div class="modal-title" style="margin-bottom:0; font-size:1.1rem;">📤 施設・マシン情報を共有</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('facility-share-modal')" style="color:var(--text-muted);">✕</button>
+        </div>
+
+        <p class="text-xs text-muted mb-md" style="line-height: 1.6;">
+          あなたが修正・設定した<strong>「${fac.name || '施設'}」</strong>のマシン情報（全 ${machineCount} 台）をコミュニティに送信し、公式カタログへの反映を提案できます。
+        </p>
+
+        <div class="card mb-md" style="background:var(--bg-secondary); padding:10px 12px; font-size:0.75rem;">
+          <div class="flex justify-between mb-xs">
+            <span class="text-muted">施設名:</span>
+            <span class="font-bold">${fac.name || '未設定'}</span>
+          </div>
+          <div class="flex justify-between mb-xs">
+            <span class="text-muted">登録マシン数:</span>
+            <span class="font-bold">${machineCount} 台</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted">ステータス:</span>
+            <span class="font-bold" style="color:var(--accent);">${fac.isMachineVerified ? '検証済み ✅' : 'ユーザー編集データ 📝'}</span>
+          </div>
+        </div>
+
+        <div class="input-group mb-sm">
+          <label class="input-label text-xs">ニックネーム（任意・クレジット表記用）</label>
+          <input type="text" id="share-nickname" class="input text-xs" value="${currentNick}" placeholder="例: 練馬のトレーニー">
+        </div>
+
+        <div class="input-group mb-md">
+          <label class="input-label text-xs">修正内容・現場メモ（任意）</label>
+          <textarea id="share-comment" class="input text-xs" placeholder="例: レッグプレスの重りを現場の実機に合わせて修正しました。チェストプレスを追加しました。" style="height:70px; resize:none;"></textarea>
+        </div>
+
+        <div class="flex gap-sm">
+          <button class="btn btn-secondary" onclick="closeModalCustom('facility-share-modal')" style="flex:1;">キャンセル</button>
+          <button class="btn btn-primary" id="btn-submit-share" onclick="submitFacilityShare()" style="flex:2;">🚀 共有する（送信）</button>
+        </div>
+
+        <div class="mt-md text-center">
+          <button class="btn btn-ghost text-xs" onclick="copyFacilityJsonToClipboard()" style="color:var(--text-muted); font-size:0.7rem;">📋 設定JSONをクリップボードにコピー</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.submitFacilityShare = async function() {
+  const btn = document.getElementById('btn-submit-share');
+  const nickname = document.getElementById('share-nickname')?.value.trim() || '匿名トレーニー';
+  const comment = document.getElementById('share-comment')?.value.trim() || '';
+  
+  localStorage.setItem('contributor_nickname', nickname);
+
+  const payload = {
+    facilityId: localStorage.getItem('selected_facility_preset') || 'custom',
+    facilityName: window.GymneryFacility?.name || '名称未設定',
+    nickname: nickname,
+    comment: comment,
+    facilityData: window.GymneryFacility,
+    submittedAt: new Date().toISOString(),
+    appVersion: 'v92'
+  };
+
+  // GAS Web App URL (ローカルストレージまたは環境設定)
+  const gasEndpoint = localStorage.getItem('custom_facility_share_endpoint') || 'https://script.google.com/macros/s/AKfycbz_fallback_endpoint/exec';
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = '送信中... ⏳';
+  }
+
+  try {
+    // 実際にエンドポイントへPOST送信 (no-cors mode fallback supported)
+    await fetch(gasEndpoint, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    closeModalCustom('facility-share-modal');
+    showToast('🎉 施設情報を共有しました！ご協力ありがとうございます💪', 'success');
+  } catch (err) {
+    console.warn('Share submit error, fallback to copy:', err);
+    closeModalCustom('facility-share-modal');
+    copyFacilityJsonToClipboard();
+    showToast('送信に失敗したため、設定JSONをコピーしました。GitHub等へ共有可能です。', 'info');
+  }
+};
+
+window.copyFacilityJsonToClipboard = function() {
+  const jsonStr = JSON.stringify(window.GymneryFacility, null, 2);
+  navigator.clipboard.writeText(jsonStr).then(() => {
+    showToast('設定JSONをクリップボードにコピーしました 📋', 'success');
+  }).catch(() => {
+    prompt('以下の設定JSONをコピーしてください:', jsonStr);
+  });
+};
+
 window.switchFacilityPreset = function(facilityId) {
   if (!facilityId) return;
   const presets = {
@@ -3701,7 +3815,10 @@ function renderSettings(main) {
       <div class="card mb-md" style="line-height: 1.6;">
         <div class="text-sm font-bold mb-xs flex justify-between items-center">
           <span>📍 施設情報・プリセット切替</span>
-          <button class="btn btn-ghost btn-sm" onclick="editFacilityInfo()" style="padding: 2px 6px;">✏️ 手動編集</button>
+          <div class="flex gap-xs">
+            <button class="btn btn-primary btn-sm" onclick="openFacilityShareModal()" style="padding: 2px 8px; font-size: 0.72rem;">📤 共有</button>
+            <button class="btn btn-ghost btn-sm" onclick="editFacilityInfo()" style="padding: 2px 6px;">✏️ 編集</button>
+          </div>
         </div>
         <div class="mb-sm">
           <label class="text-xs text-muted">プリセット施設切替:</label>
@@ -3810,7 +3927,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v92)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v93)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -5230,7 +5347,8 @@ window.showMachineManagementList = function() {
           ${listHtml}
         </div>
 
-        <div class="mt-md text-center" style="border-top: 1px solid var(--border-color); padding-top: 10px;">
+        <div class="mt-md text-center" style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <button class="btn btn-primary btn-sm btn-block mb-sm" onclick="openFacilityShareModal()" style="font-weight:bold;">📤 この施設の設定・マシン情報をみんなに共有する</button>
           <button class="btn btn-ghost text-xs" style="color:var(--danger)" onclick="resetMachineConfigToDefault()">デフォルトのマシン設定に戻す</button>
         </div>
       </div>
