@@ -3810,7 +3810,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v91)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v92)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4533,6 +4533,12 @@ window.proceedFromWizardStep1 = async function() {
     }
   }
 
+  // ホーム画面を最新の設定・番号で即時再描画
+  const main = document.getElementById('main-content');
+  if (main && currentPage === 'home') {
+    renderHome(main);
+  }
+
   nextWizardStep(2);
 };
 
@@ -4564,6 +4570,15 @@ window.completeWizard = async function() {
 };
 
 async function finishWizard() {
+  // ウィザード Step 1 の利用番号入力を吸い上げて保存
+  const memberInp = document.getElementById('wizard-member-id');
+  if (memberInp) {
+    const memberIdVal = memberInp.value.trim();
+    if (memberIdVal) {
+      localStorage.setItem('member_id', memberIdVal);
+    }
+  }
+
   localStorage.setItem('gs_wizard_completed', '1');
   try {
     await saveAppSetting('gs_wizard_completed', '1');
@@ -4575,6 +4590,12 @@ async function finishWizard() {
   if (overlay) {
     overlay.classList.remove('active');
     setTimeout(() => overlay.remove(), 400);
+  }
+
+  // ホーム画面およびヘッダーを最新の設定・会員番号で即座に再描画
+  const main = document.getElementById('main-content');
+  if (main && currentPage === 'home') {
+    renderHome(main);
   }
 }
 
