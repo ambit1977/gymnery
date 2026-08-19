@@ -3793,7 +3793,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v89)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v90)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4380,21 +4380,45 @@ function showOnboardingWizard() {
   const existing = document.getElementById('wizard-overlay');
   if (existing) existing.remove();
 
+  const currentPreset = localStorage.getItem('selected_facility_preset') || 'asahicho';
+  const currentMemberId = localStorage.getItem('member_id') || '';
+
   const wizardHtml = `
     <div id="wizard-overlay" class="wizard-overlay">
-      <div class="wizard-container">
+      <div class="wizard-container" style="max-height: 90vh; overflow-y: auto;">
         <button class="wizard-skip-btn" onclick="skipWizard()">スキップ ✕</button>
         
-        <!-- Step 1 -->
+        <!-- Step 1: 施設選択 & データ協力のお願い -->
         <div id="wizard-step-1" class="wizard-step active">
-          <div style="font-size: 2.2rem; margin-bottom: 12px;">🏋️‍♂️</div>
-          <h2 class="text-base font-bold mb-md" style="margin-top:0">Gymny へようこそ！</h2>
-          <p class="text-xs text-muted mb-lg" style="line-height: 1.6; text-align: left;">
-            Gymnyはトレーニング室でのワークアウトを記録・管理するアプリです。<br><br>
-            現在の対象施設:<br>
-            <strong style="color: var(--accent); font-size: 0.85rem;">📍 ${window.GymneryFacility?.name || 'トレーニング室'}</strong>
-          </p>
-          <button class="btn btn-primary" onclick="nextWizardStep(2)" style="width:100%">初期設定を始める</button>
+          <div style="font-size: 2.2rem; margin-bottom: 8px;">🏋️‍♂️</div>
+          <h2 class="text-base font-bold mb-xs" style="margin-top:0">Gymny へようこそ！</h2>
+          <p class="text-xs text-muted mb-sm">ご利用になるトレーニング施設を選択してください。</p>
+
+          <div class="mb-sm text-left">
+            <label class="text-xs font-bold text-muted mb-xs" style="display:block;">📍 ご利用の施設:</label>
+            <select id="wizard-facility-select" class="input text-xs" style="width:100%; padding:8px 10px; font-weight:bold; background:var(--bg-elevated);" onchange="handleWizardFacilityChange(this.value)">
+              <option value="asahicho" ${currentPreset === 'asahicho' ? 'selected' : ''}>🏛️ 旭町南地区区民館 (★全17台・写真登録済)</option>
+              <option value="hikarigaoka" ${currentPreset === 'hikarigaoka' ? 'selected' : ''}>🏢 光が丘体育館 (標準プリセット)</option>
+              <option value="nerima_sougou" ${currentPreset === 'nerima_sougou' ? 'selected' : ''}>🏟️ 練馬区立総合体育館 (標準プリセット)</option>
+              <option value="heiwadai" ${currentPreset === 'heiwadai' ? 'selected' : ''}>🏢 平和台体育館 (標準プリセット)</option>
+              <option value="kamishakujii" ${currentPreset === 'kamishakujii' ? 'selected' : ''}>🏢 上石神井体育館 (標準プリセット)</option>
+            </select>
+          </div>
+
+          <div id="wizard-facility-notice" class="card mb-md text-left" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:10px 12px; font-size:0.75rem; line-height:1.5;">
+            <div style="font-weight:bold; color:var(--accent); margin-bottom:4px;">💡 施設データと情報提供のお願い</div>
+            <div id="wizard-notice-text" class="text-muted">
+              現在、写真・全17台の正確なウェイト刻みが完全に登録されているのは<strong>「旭町南地区区民館」</strong>のみです。<br>
+              他施設は一般的な標準構成となっております。各施設の正確なマシン・重り設定への修正（設定 ＞ 設置マシン一覧から可能）にご協力をお願いいたします！
+            </div>
+          </div>
+
+          <div class="mb-md text-left">
+            <label class="text-xs font-bold text-muted mb-xs" style="display:block;">🪪 利用番号・記号 (任意):</label>
+            <input type="text" id="wizard-member-id" class="input text-xs" value="${currentMemberId}" placeholder="例: C-41、1234 等 (後からでも設定可能)" style="width:100%;">
+          </div>
+
+          <button class="btn btn-primary" onclick="proceedFromWizardStep1()" style="width:100%">初期設定を始める ›</button>
         </div>
 
         <!-- Step 2 -->
@@ -4446,6 +4470,51 @@ function showOnboardingWizard() {
     document.getElementById('wizard-overlay')?.classList.add('active');
   }, 100);
 }
+
+
+window.handleWizardFacilityChange = function(facilityId) {
+  const noticeEl = document.getElementById('wizard-notice-text');
+  if (!noticeEl) return;
+  if (facilityId === 'asahicho') {
+    noticeEl.innerHTML = '現在、写真・全17台の正確なウェイト刻みが完全に登録されているのは<strong>「旭町南地区区民館」</strong>のみです。<br>そのまま快適にすべての機能をご利用いただけます。';
+  } else {
+    const names = {
+      'hikarigaoka': '光が丘体育館',
+      'nerima_sougou': '練馬区立総合体育館',
+      'heiwadai': '平和台体育館',
+      'kamishakujii': '上石神井体育館'
+    };
+    const name = names[facilityId] || '選択した施設';
+    noticeEl.innerHTML = `<strong>「${name}」</strong>は現在、一般的な標準マシン構成となっております。<br>実際の館内マシンや重量刻みと異なる場合は、アプリ内（設定 ＞ 設置マシン一覧）からいつでも簡単に編集できます。ぜひ正確なデータ登録・情報提供にご協力ください！`;
+  }
+};
+
+window.proceedFromWizardStep1 = async function() {
+  const select = document.getElementById('wizard-facility-select');
+  const memberInp = document.getElementById('wizard-member-id');
+  
+  if (select) {
+    const selectedFacility = select.value;
+    const prevFacility = localStorage.getItem('selected_facility_preset') || 'asahicho';
+    localStorage.setItem('selected_facility_preset', selectedFacility);
+    
+    if (selectedFacility !== prevFacility) {
+      localStorage.removeItem('custom_facility_info');
+      localStorage.removeItem('custom_machines');
+      // 施設設定を再読み込み
+      await loadFacilityConfig();
+    }
+  }
+
+  if (memberInp) {
+    const memberIdVal = memberInp.value.trim();
+    if (memberIdVal) {
+      localStorage.setItem('member_id', memberIdVal);
+    }
+  }
+
+  nextWizardStep(2);
+};
 
 window.nextWizardStep = function(stepNum) {
   // 全ステップ非表示
