@@ -946,7 +946,19 @@ async function renderHome(main) {
     </div>
   `;
 
-  main.innerHTML = `<div class="page">${memberCardHtml}${checklistHtml}${activeHtml}${recentHtml}${bodyHtml}</div>`;
+  const unverifiedBannerHtml = (window.GymneryFacility && window.GymneryFacility.isMachineVerified === false) ? `
+    <div class="card mb-md" style="background: rgba(255, 152, 0, 0.08); border: 1.5px dashed #ff9800; padding: 12px 14px; border-radius: var(--radius-md);">
+      <div class="flex items-center justify-between">
+        <div style="font-size: 0.85rem; font-weight: bold; color: #ff9800;">⚠️ マシン設定は仮テンプレートです</div>
+        <button class="btn btn-sm btn-secondary" onclick="showMachineManagementList()" style="font-size: 0.7rem; padding: 2px 8px; border-color: #ff9800; color: #ff9800;">設定する ›</button>
+      </div>
+      <p class="text-xs text-muted mt-xs" style="margin-bottom: 0; line-height: 1.4;">
+        ${window.GymneryFacility.name}の実機マシンと重り刻みは未確認です。現場に合わせて設定画面から重りを設定してください。
+      </p>
+    </div>
+  ` : '';
+
+  main.innerHTML = `<div class="page">${unverifiedBannerHtml}${memberCardHtml}${checklistHtml}${activeHtml}${recentHtml}${bodyHtml}</div>`;
 
   if (activeSessionId) {
     const session = await getSession(activeSessionId);
@@ -1058,6 +1070,11 @@ async function showMachineSelect() {
     </div>
     
     <!-- タブ切り替えバー -->
+    ${(window.GymneryFacility && window.GymneryFacility.isMachineVerified === false) ? `
+      <div style="background:rgba(255,152,0,0.1); border:1px solid #ff9800; padding:8px 10px; border-radius:var(--radius-sm); margin-bottom:10px; font-size:0.72rem; color:#ff9800; line-height:1.4;">
+        ⚠️ マシン・重り設定は仮テンプレートです。現場と異なる場合は「設定 ＞ 設置マシン一覧」から重りを調整してください。
+      </div>
+    ` : ''}
     <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border-color);">
       <button class="btn btn-sm ${currentMachineViewMode === 'recommended' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('recommended')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">今日おすすめ (回復済)</button>
       <button class="btn btn-sm ${currentMachineViewMode === 'category' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('category')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">部位別</button>
@@ -3793,7 +3810,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v90)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v91)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -4395,21 +4412,21 @@ function showOnboardingWizard() {
           <p class="text-xs text-muted mb-sm">ご利用になるトレーニング施設を選択してください。</p>
 
           <div class="mb-sm text-left">
-            <label class="text-xs font-bold text-muted mb-xs" style="display:block;">📍 ご利用の施設:</label>
+            <label class="text-xs font-bold text-muted mb-xs" style="display:block;">📍 ご利用の施設を選択:</label>
             <select id="wizard-facility-select" class="input text-xs" style="width:100%; padding:8px 10px; font-weight:bold; background:var(--bg-elevated);" onchange="handleWizardFacilityChange(this.value)">
-              <option value="asahicho" ${currentPreset === 'asahicho' ? 'selected' : ''}>🏛️ 旭町南地区区民館 (★全17台・写真登録済)</option>
-              <option value="hikarigaoka" ${currentPreset === 'hikarigaoka' ? 'selected' : ''}>🏢 光が丘体育館 (標準プリセット)</option>
-              <option value="nerima_sougou" ${currentPreset === 'nerima_sougou' ? 'selected' : ''}>🏟️ 練馬区立総合体育館 (標準プリセット)</option>
-              <option value="heiwadai" ${currentPreset === 'heiwadai' ? 'selected' : ''}>🏢 平和台体育館 (標準プリセット)</option>
-              <option value="kamishakujii" ${currentPreset === 'kamishakujii' ? 'selected' : ''}>🏢 上石神井体育館 (標準プリセット)</option>
+              <option value="asahicho" ${currentPreset === 'asahicho' ? 'selected' : ''}>🏛️ 旭町南地区区民館 (実機マシン・重量登録済 ✅)</option>
+              <option value="hikarigaoka" ${currentPreset === 'hikarigaoka' ? 'selected' : ''}>🏢 光が丘体育館 (施設情報のみ・マシン初期設定要 ⚠️)</option>
+              <option value="nerima_sougou" ${currentPreset === 'nerima_sougou' ? 'selected' : ''}>🏟️ 練馬区立総合体育館 (施設情報のみ・マシン初期設定要 ⚠️)</option>
+              <option value="heiwadai" ${currentPreset === 'heiwadai' ? 'selected' : ''}>🏢 平和台体育館 (施設情報のみ・マシン初期設定要 ⚠️)</option>
+              <option value="kamishakujii" ${currentPreset === 'kamishakujii' ? 'selected' : ''}>🏢 上石神井体育館 (施設情報のみ・マシン初期設定要 ⚠️)</option>
             </select>
           </div>
 
           <div id="wizard-facility-notice" class="card mb-md text-left" style="background:var(--bg-secondary); border:1px solid var(--border-color); padding:10px 12px; font-size:0.75rem; line-height:1.5;">
-            <div style="font-weight:bold; color:var(--accent); margin-bottom:4px;">💡 施設データと情報提供のお願い</div>
+            <div id="wizard-notice-title" style="font-weight:bold; color:var(--accent); margin-bottom:4px;">💡 マシン登録状況について</div>
             <div id="wizard-notice-text" class="text-muted">
-              現在、写真・全17台の正確なウェイト刻みが完全に登録されているのは<strong>「旭町南地区区民館」</strong>のみです。<br>
-              他施設は一般的な標準構成となっております。各施設の正確なマシン・重り設定への修正（設定 ＞ 設置マシン一覧から可能）にご協力をお願いいたします！
+              現在、写真・全17台の実機ウエイト刻みが完全登録されているのは<strong>「旭町南地区区民館」</strong>のみです。<br>
+              そのまま快適にご利用いただけます。
             </div>
           </div>
 
@@ -4473,10 +4490,12 @@ function showOnboardingWizard() {
 
 
 window.handleWizardFacilityChange = function(facilityId) {
+  const titleEl = document.getElementById('wizard-notice-title');
   const noticeEl = document.getElementById('wizard-notice-text');
   if (!noticeEl) return;
   if (facilityId === 'asahicho') {
-    noticeEl.innerHTML = '現在、写真・全17台の正確なウェイト刻みが完全に登録されているのは<strong>「旭町南地区区民館」</strong>のみです。<br>そのまま快適にすべての機能をご利用いただけます。';
+    if (titleEl) { titleEl.textContent = '✅ 実機マシン登録済み施設'; titleEl.style.color = '#4ecdc4'; }
+    noticeEl.innerHTML = '写真・全17台の正確なウエイト刻みが完全に登録されています。<br>そのまま即座に正確なトレーニング記録にご利用いただけます。';
   } else {
     const names = {
       'hikarigaoka': '光が丘体育館',
@@ -4485,7 +4504,8 @@ window.handleWizardFacilityChange = function(facilityId) {
       'kamishakujii': '上石神井体育館'
     };
     const name = names[facilityId] || '選択した施設';
-    noticeEl.innerHTML = `<strong>「${name}」</strong>は現在、一般的な標準マシン構成となっております。<br>実際の館内マシンや重量刻みと異なる場合は、アプリ内（設定 ＞ 設置マシン一覧）からいつでも簡単に編集できます。ぜひ正確なデータ登録・情報提供にご協力ください！`;
+    if (titleEl) { titleEl.textContent = '⚠️ マシン設定についてのご注意'; titleEl.style.color = '#ff9800'; }
+    noticeEl.innerHTML = `<strong>「${name}」</strong>は開館時間・料金等の施設情報のみ登録済みです。<br><span style="color:#ff9800;">※ マシン一覧と重り刻みは仮の初期テンプレート（未確認）です。</span><br>実際のトレーニング前に、設定画面（設置マシン一覧）から現場の重り刻みに合わせて設定してください。`;
   }
 };
 

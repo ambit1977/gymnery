@@ -287,5 +287,6 @@
       "hasSets": false,
       "description": "有酸素バイクです。"
     }
-  ]
+  ],
+  "isMachineVerified": false
 }

@@ -19,9 +19,21 @@
     "安全のため、スタッフの指示に従ってトレーニングを行ってください。"
   ],
   "categories": {
-    "upper": { "label": "上半身", "icon": "💪", "color": "#4ecdc4" },
-    "lower": { "label": "下半身", "icon": "🦵", "color": "#ff6b6b" },
-    "cardio": { "label": "有酸素", "icon": "🏃", "color": "#38bdf8" }
+    "upper": {
+      "label": "上半身",
+      "icon": "💪",
+      "color": "#4ecdc4"
+    },
+    "lower": {
+      "label": "下半身",
+      "icon": "🦵",
+      "color": "#ff6b6b"
+    },
+    "cardio": {
+      "label": "有酸素",
+      "icon": "🏃",
+      "color": "#38bdf8"
+    }
   },
   "machines": [
     {
@@ -31,10 +43,31 @@
       "type": "strength",
       "sheetCol": "C",
       "fields": [
-        { "key": "weight", "label": "重量", "unit": "kg", "type": "number", "step": 1.0, "min": 0 },
-        { "key": "reps", "label": "回数", "unit": "回", "type": "number", "step": 1, "min": 0 }
+        {
+          "key": "weight",
+          "label": "重量",
+          "unit": "kg",
+          "type": "number",
+          "step": 1.0,
+          "min": 0
+        },
+        {
+          "key": "reps",
+          "label": "回数",
+          "unit": "回",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
       ],
-      "weights": [5.0, 10.0, 15.0, 20.0, 25.0, 30.0],
+      "weights": [
+        5.0,
+        10.0,
+        15.0,
+        20.0,
+        25.0,
+        30.0
+      ],
       "hasSets": true,
       "description": "胸の筋肉を鍛えるサンプルマシンです。"
     },
@@ -45,11 +78,26 @@
       "type": "cardio",
       "sheetCol": "D",
       "fields": [
-        { "key": "distance", "label": "距離", "unit": "km", "type": "number", "step": 0.1, "min": 0 },
-        { "key": "duration", "label": "時間", "unit": "分", "type": "number", "step": 1, "min": 0 }
+        {
+          "key": "distance",
+          "label": "距離",
+          "unit": "km",
+          "type": "number",
+          "step": 0.1,
+          "min": 0
+        },
+        {
+          "key": "duration",
+          "label": "時間",
+          "unit": "分",
+          "type": "number",
+          "step": 1,
+          "min": 0
+        }
       ],
       "hasSets": false,
       "description": "有酸素運動用のサンプルランニングマシンです。"
     }
-  ]
+  ],
+  "isMachineVerified": false
 }

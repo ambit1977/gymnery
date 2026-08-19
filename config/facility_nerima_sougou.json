@@ -287,5 +287,6 @@
       "hasSets": false,
       "description": "固定式フィットネスバイクです。"
     }
-  ]
+  ],
+  "isMachineVerified": false
 }
