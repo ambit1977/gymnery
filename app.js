@@ -516,16 +516,15 @@ async function restoreIntervalTimer() {
   if (now >= endTime && triggered === '0') {
     localStorage.setItem('interval_timer_triggered', '1');
     if (activeSessionId) {
-      await addSetRow(machineId);
-      showToast('バックグラウンド中にインターバルが終了したため、セットを追加しました ⏱', 'success');
+      const modal = document.querySelector('.modal-overlay');
+      if (modal && modal.dataset.isExercise === 'true' && modal.dataset.machineId === machineId) {
+        addSetRow(machineId);
+      } else {
+        addSetToDraft(machineId);
+      }
+      showToast('インターバルが終了したため、次のセットを追加しました ⏱', 'success');
     }
     clearLocalIntervalTimer();
-    
-    // 現在モーダルが開いていれば再レンダリングする
-    const modal = document.querySelector('.modal');
-    if (modal && typeof showWorkoutDetail === 'function') {
-      showWorkoutDetail(machineId);
-    }
   } else if (now < endTime) {
     // まだ時間がある場合はタイマー表示を再起動
     const container = document.getElementById('interval-timer-container');
@@ -1692,6 +1691,20 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     if (!editExerciseId && !hasMatchingDraft && defaultSets.length > 0) {
       defaultSets = [defaultSets[0]];
     }
+    
+    // 最小化中にインターバルタイマーが終了したのにセット未追加だった場合の安全リカバリー
+    const intervalTriggered = localStorage.getItem('interval_timer_triggered');
+    const intervalEndTime = Number(localStorage.getItem('interval_timer_end_time') || '0');
+    const intervalMachine = localStorage.getItem('interval_timer_machine_id');
+    if (intervalMachine === machineId && intervalEndTime > 0 && Date.now() >= intervalEndTime && intervalTriggered === '0') {
+      localStorage.setItem('interval_timer_triggered', '1');
+      if (defaultSets.length > 0) {
+        const lastSet = defaultSets[defaultSets.length - 1];
+        defaultSets.push({ ...lastSet });
+      }
+      clearLocalIntervalTimer();
+      showToast('インターバルが終了したため、次のセットを追加しました ⏱', 'success');
+    }
     html += `<div id="sets-container">`;
     defaultSets.forEach((s, i) => {
       html += renderSetRow(machine, i, s);
@@ -1758,6 +1771,32 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
 
   showModal(html, true, machineId, editExerciseId, targetSessionId);
 
+  // セッションタイマーが動いていればモーダルの残り時間を即座に更新＆タイマー起動
+  if (activeSessionId && activeSessionId === resolvedSessionId) {
+    getSession(activeSessionId).then(session => {
+      if (session && session.startTime) {
+        const modalTimerEl = document.getElementById('modal-timer-display');
+        if (modalTimerEl) {
+          const SESSION_DURATION = 60 * 60 * 1000;
+          const diff = Date.now() - new Date(session.startTime).getTime();
+          const remain = SESSION_DURATION - diff;
+          const isOvertime = remain <= 0;
+          const absRemain = Math.abs(remain);
+          const remainMinutes = Math.floor(absRemain / 60000);
+          const remainSeconds = Math.floor((absRemain % 60000) / 1000);
+          const remainStr = `${isOvertime ? '+' : ''}${String(remainMinutes).padStart(2, '0')}:${String(remainSeconds).padStart(2, '0')}`;
+          modalTimerEl.textContent = remainStr;
+          modalTimerEl.className = isOvertime ? 'urgency-critical' : remain <= 5 * 60 * 1000 ? 'urgency-danger' : remain <= 15 * 60 * 1000 ? 'urgency-warning' : 'urgency-normal';
+        }
+        // timerInterval が停止している場合は再開
+        if (!timerInterval) {
+          const dummyContainer = document.getElementById('session-timer') || document.createElement('div');
+          startTimer(session.startTime, dummyContainer);
+        }
+      }
+    });
+  }
+
   // インターバルタイマーが稼働中の場合は、モーダル内のタイマー表示を即座に再起動・再バインド
   if (intervalTimerEndTime && intervalTimerMachineId === machineId) {
     const container = document.getElementById('interval-timer-container');
@@ -1805,6 +1844,35 @@ function renderSetRow(machine, index, data = {}) {
     ${fields}
     <button class="set-delete" onclick="removeSetRow(this)">✕</button>
   </div>`;
+}
+
+
+function addSetToDraft(machineId) {
+  let draft = window.currentExerciseDraft;
+  if (!draft) {
+    try {
+      const saved = localStorage.getItem('gymnery_exercise_draft');
+      if (saved) draft = JSON.parse(saved);
+    } catch (e) {}
+  }
+  if (!draft || draft.machineId !== machineId) return;
+
+  const machine = getMachineById(machineId);
+  if (!machine || machine.type !== 'strength') return;
+
+  if (!Array.isArray(draft.data)) draft.data = [{}];
+  
+  // 最後のセット内容をコピー
+  const lastSet = draft.data[draft.data.length - 1] || {};
+  const newSet = { ...lastSet };
+  draft.data.push(newSet);
+
+  window.currentExerciseDraft = draft;
+  try {
+    localStorage.setItem('gymnery_exercise_draft', JSON.stringify(draft));
+  } catch (e) {}
+
+  renderActiveExerciseBar();
 }
 
 function addSetRow(machineId) {
@@ -2002,7 +2070,12 @@ function startIntervalTimer(machineId, skipSchedule = false) {
         display.classList.add('interval-flash');
         showToast('インターバル終了 ⏱', '');
 
-        addSetRow(machineId);
+        const setsContainer = document.getElementById('sets-container');
+        if (setsContainer) {
+          addSetRow(machineId);
+        } else {
+          addSetToDraft(machineId);
+        }
       }
       
       // カウントアップ表示
@@ -3936,7 +4009,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v94)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v95)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
@@ -5039,8 +5112,14 @@ async function renderMuscleMap() {
     let status = '未実施';
     if (diffDays >= 0) {
       if (diffDays === 0) { color = '#ef4444'; status = '当日'; }
-      else if (diffDays < rd) { color = '#f59e0b'; status = diffDays + '日前'; }
-      else { color = '#10b981'; status = diffDays + '日前'; }
+      else if (diffDays <= rd) { 
+        color = '#f59e0b'; 
+        status = (diffDays === 1) ? '昨日' : (diffDays === 2) ? '中1日' : `${diffDays}日前`; 
+      }
+      else { 
+        color = '#10b981'; 
+        status = (diffDays === 2) ? '中1日' : (diffDays === 3) ? '中2日' : `${diffDays}日前`; 
+      }
     }
 
     muscleRecovery[mg.id] = { color, diffDays, status, name: mg.name, machines: mg.machines, category: mg.category, side: mg.side, recoveryDays: rd };
