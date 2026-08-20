@@ -1640,6 +1640,9 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     lastData = draft.data;
     lastNote = draft.note || '';
     if (draft.targetSessionId) resolvedSessionId = draft.targetSessionId;
+  } else if (!isRestore) {
+    // 最小化バーからの復元ではなく通常画面から開いた場合は古い下書きを破棄
+    clearExerciseDraft();
   } else if (editExerciseId) {
     const db = new Dexie('TrainingRoomApp');
     db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
@@ -1905,6 +1908,10 @@ function removeSetRow(btn) {
 }
 
 async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targetSessionId = null) {
+  // 連打による重複保存を防止
+  const buttons = document.querySelectorAll('.modal button, .modal input[type="button"]');
+  buttons.forEach(b => { b.disabled = true; });
+
   const machine = getMachineById(machineId);
   let data;
 
@@ -1979,6 +1986,7 @@ async function saveExercise(machineId, editExerciseId = null, mode = 'ok', targe
   }
 
   clearLocalIntervalTimer();
+  clearExerciseDraft();
   closeModal();
 
   if (window.GymneryGSheets && window.GymneryGSheets.maybeAutoSync) {
@@ -4009,7 +4017,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v95)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v96)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
