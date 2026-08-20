@@ -1,5 +1,210 @@
 
 // ========================================
+// アドホック種目入力 ＆ マシン自動登録機能
+// ========================================
+window.openAdhocExerciseModal = function(targetSessionId = null) {
+  closeModal(true);
+
+  const modalHtml = `
+    <div class="modal-overlay active" id="adhoc-exercise-modal" style="z-index: 250;">
+      <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
+        <div class="modal-handle"></div>
+        <div class="flex items-center justify-between mb-md">
+          <div class="modal-title" style="margin-bottom:0; font-size:1.1rem;">✍️ 自由入力で種目を記録</div>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('adhoc-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="color:var(--text-muted);">✕ 戻る</button>
+        </div>
+
+        <div class="input-group mb-sm">
+          <label class="input-label text-xs font-bold">種目名 <span style="color:var(--danger)">*</span></label>
+          <input type="text" id="adhoc-name" class="input text-sm" placeholder="例: ダンベルサイドレイズ、チンニング、自重スクワット等" style="font-weight:bold;">
+        </div>
+
+        <div class="flex gap-sm mb-sm">
+          <div class="input-group" style="flex:1;">
+            <label class="input-label text-xs">部位カテゴリ</label>
+            <select class="input text-xs" id="adhoc-category">
+              <option value="upper" selected>💪 上半身 (胸・背中・肩)</option>
+              <option value="lower">🦵 下半身 (脚・尻)</option>
+              <option value="core">🧘 体幹 (腹筋・背筋)</option>
+              <option value="arm">🤜 腕 (二頭・三頭)</option>
+              <option value="cardio">🏃 有酸素 (ラン・バイク等)</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- セット入力エリア -->
+        <div class="text-xs font-bold text-muted mb-xs">📝 セット・負荷の入力</div>
+        <div id="adhoc-sets-container">
+          <div class="set-row adhoc-set-row" data-set="0" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+            <div class="set-number" style="font-weight:bold; font-size:0.85rem; width:20px;">1</div>
+            <div style="flex:1;">
+              <input type="number" class="input text-xs adhoc-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="20" style="width:100%;">
+            </div>
+            <div style="flex:1;">
+              <input type="number" class="input text-xs adhoc-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="10" style="width:100%;">
+            </div>
+            <button class="set-delete" onclick="this.parentElement.remove()" style="color:var(--text-muted); padding:4px 8px; border:none; background:none; cursor:pointer;">✕</button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-sm mt-xs mb-md">
+          <button class="btn btn-secondary btn-sm" onclick="addAdhocSetRow()" style="flex:1; padding:6px 10px; font-size:0.75rem;">＋ セットを追加</button>
+        </div>
+
+        <div class="input-group mb-md">
+          <label class="input-label text-xs">メモ・シート調整位置（任意）</label>
+          <input type="text" class="input text-xs" id="adhoc-note" placeholder="例: ダンベル各10kg、インクライン30度等">
+        </div>
+
+        <!-- 施設マシン一覧への簡単登録オプション -->
+        <div class="card mb-md" style="background:var(--bg-secondary); padding:10px 12px; border:1px solid var(--border-color); border-radius:var(--radius-sm);">
+          <label class="flex items-center gap-xs" style="cursor:pointer; font-size:0.8rem; font-weight:bold;">
+            <input type="checkbox" id="adhoc-save-to-facility" checked style="width:16px; height:16px; accent-color:var(--accent);">
+            <span>この種目を施設のマシン一覧にも追加する</span>
+          </label>
+          <p class="text-xs text-muted mt-xs" style="margin:0; font-size:0.7rem; line-height:1.4;">
+            チェックを付けると、次回から「マシン選択」に表示され、ワンタップで記録できるようになります。
+          </p>
+        </div>
+
+        <div class="flex gap-sm">
+          <button class="btn btn-secondary" onclick="closeModalCustom('adhoc-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="flex:1;">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveAdhocExercise(${targetSessionId || 'null'})" style="flex:2; font-weight:bold;">OK (記録して保存) 💪</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+
+window.addAdhocSetRow = function() {
+  const container = document.getElementById('adhoc-sets-container');
+  if (!container) return;
+  const rows = container.querySelectorAll('.adhoc-set-row');
+  const nextIdx = rows.length;
+  
+  let prevWeight = '20';
+  let prevReps = '10';
+  if (rows.length > 0) {
+    const lastRow = rows[rows.length - 1];
+    prevWeight = lastRow.querySelector('.adhoc-weight')?.value || prevWeight;
+    prevReps = lastRow.querySelector('.adhoc-reps')?.value || prevReps;
+  }
+
+  const rowHtml = `
+    <div class="set-row adhoc-set-row" data-set="${nextIdx}" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+      <div class="set-number" style="font-weight:bold; font-size:0.85rem; width:20px;">${nextIdx + 1}</div>
+      <div style="flex:1;">
+        <input type="number" class="input text-xs adhoc-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="${prevWeight}" style="width:100%;">
+      </div>
+      <div style="flex:1;">
+        <input type="number" class="input text-xs adhoc-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="${prevReps}" style="width:100%;">
+      </div>
+      <button class="set-delete" onclick="this.parentElement.remove()" style="color:var(--text-muted); padding:4px 8px; border:none; background:none; cursor:pointer;">✕</button>
+    </div>
+  `;
+  container.insertAdjacentHTML('beforeend', rowHtml);
+};
+
+window.saveAdhocExercise = async function(targetSessionId = null) {
+  const nameInp = document.getElementById('adhoc-name');
+  const name = nameInp ? nameInp.value.trim() : '';
+  if (!name) {
+    showToast('種目名を入力してください', 'danger');
+    if (nameInp) nameInp.focus();
+    return;
+  }
+
+  const category = document.getElementById('adhoc-category')?.value || 'upper';
+  const note = document.getElementById('adhoc-note')?.value.trim() || '';
+  const saveToFacility = document.getElementById('adhoc-save-to-facility')?.checked;
+
+  const rows = document.querySelectorAll('#adhoc-sets-container .adhoc-set-row');
+  const setsData = [];
+  rows.forEach(r => {
+    const w = parseFloat(r.querySelector('.adhoc-weight')?.value) || 0;
+    const rep = parseInt(r.querySelector('.adhoc-reps')?.value, 10) || 10;
+    setsData.push({ weight: w, reps: rep });
+  });
+
+  if (setsData.length === 0) {
+    setsData.push({ weight: 0, reps: 10 });
+  }
+
+  // 既存マシンに同名があるか探す
+  let machineId = null;
+  const existingMachine = (window.GymneryFacility?.machines || []).find(m => m.name === name);
+  if (existingMachine) {
+    machineId = existingMachine.id;
+  } else {
+    // ユニークID作成
+    machineId = 'custom_' + Date.now();
+  }
+
+  // 施設マシンリストへの追加
+  if (saveToFacility || !existingMachine) {
+    const customWeights = Array.from(new Set(setsData.map(s => Number(s.weight)).filter(w => !isNaN(w) && w > 0)));
+    if (customWeights.length === 0) customWeights.push(5, 10, 15, 20, 25, 30, 35, 40, 45, 50);
+    else customWeights.sort((a,b) => a - b);
+
+    const newMachine = {
+      id: machineId,
+      name: name,
+      category: category,
+      type: 'strength',
+      fields: [
+        { key: 'weight', label: '重量', unit: 'kg', type: 'number', step: 1, min: 0 },
+        { key: 'reps', label: '回数', unit: '回', type: 'number', step: 1, min: 1 }
+      ],
+      weights: customWeights.length >= 5 ? customWeights : [5, 10, 15, 20, 25, 30, 35, 40, 45, 50],
+      hasSets: true,
+      description: 'カスタム登録種目'
+    };
+
+    if (!window.GymneryFacility) window.GymneryFacility = { machines: [] };
+    if (!window.GymneryFacility.machines) window.GymneryFacility.machines = [];
+
+    const existingIdx = window.GymneryFacility.machines.findIndex(m => m.id === machineId);
+    if (existingIdx >= 0) {
+      window.GymneryFacility.machines[existingIdx] = newMachine;
+    } else {
+      window.GymneryFacility.machines.push(newMachine);
+    }
+
+    try {
+      localStorage.setItem('custom_machines', JSON.stringify(window.GymneryFacility.machines));
+    } catch (e) {}
+  }
+
+  // セッションに記録
+  const resolvedSessionId = targetSessionId || activeSessionId;
+  if (!resolvedSessionId) {
+    showToast('アクティブなセッションがありません', 'danger');
+    return;
+  }
+
+  await addExercise(resolvedSessionId, machineId, setsData, 'ok', note);
+  await saveMachineSetting(machineId, { data: [setsData[0]], note: note });
+
+  clearLocalIntervalTimer();
+  clearExerciseDraft();
+  closeModalCustom('adhoc-exercise-modal');
+
+  showToast(`${name} を記録しました！💪${saveToFacility ? ' (マシン一覧にも登録)' : ''}`, 'success');
+
+  if (window.GymneryGSheets && window.GymneryGSheets.maybeAutoSync) {
+    window.GymneryGSheets.maybeAutoSync();
+  }
+
+  if (targetSessionId) {
+    showSessionDetail(targetSessionId);
+  } else {
+    navigateTo('home');
+  }
+};
+
+// ========================================
 // 施設データ共有・コミュニティ貢献機能 (Phase 2)
 // ========================================
 window.openFacilityShareModal = function() {
@@ -1188,6 +1393,13 @@ async function showMachineSelect() {
         ⚠️ マシン・重り設定は仮テンプレートです。現場と異なる場合は「設定 ＞ 設置マシン一覧」から重りを調整してください。
       </div>
     ` : ''}
+
+    <div class="mb-sm">
+      <button class="btn btn-secondary btn-sm btn-block" onclick="openAdhocExerciseModal()" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>✍️</span> <span>自由入力で種目・負荷を記録（アドホック）</span>
+      </button>
+    </div>
+
     <div class="flex gap-xs mb-md" style="background:var(--bg-secondary); padding:4px; border-radius:var(--radius-md); border:1px solid var(--border-color);">
       <button class="btn btn-sm ${currentMachineViewMode === 'recommended' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('recommended')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">今日おすすめ (回復済)</button>
       <button class="btn btn-sm ${currentMachineViewMode === 'category' ? 'btn-primary' : 'btn-ghost'}" onclick="changeMachineViewMode('category')" style="flex:1; border-radius:var(--radius-sm); font-size:0.8rem; font-weight:bold;">部位別</button>
@@ -2279,6 +2491,13 @@ async function showPastSessionMachineSelect(sessionId) {
       <div class="modal-title" style="margin-bottom:0">過去セッションへの種目追加</div>
       <button class="btn btn-ghost btn-sm" onclick="closeModal()" style="padding:4px 12px;font-size:14px;color:var(--text-secondary)">✕ 閉じる</button>
     </div>
+    
+    <div class="mb-sm">
+      <button class="btn btn-secondary btn-sm btn-block" onclick="openAdhocExerciseModal(${sessionId})" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>✍️</span> <span>自由入力で種目・負荷を記録（アドホック）</span>
+      </button>
+    </div>
+
     <div style="max-height: 55vh; overflow-y: auto; padding-right: 4px;">
   `;
 
@@ -4017,7 +4236,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v96)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v97)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
