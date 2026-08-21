@@ -1,28 +1,28 @@
 
 // ========================================
-// アドホック種目入力 ＆ マシン自動登録機能
+// 自由入力種目（カスタム種目）記録 ＆ マシン登録機能
 // ========================================
-window.openAdhocExerciseModal = function(targetSessionId = null) {
+window.openCustomExerciseModal = function(targetSessionId = null) {
   closeModal(true);
 
   const modalHtml = `
-    <div class="modal-overlay active" id="adhoc-exercise-modal" style="z-index: 250;">
+    <div class="modal-overlay active" id="custom-exercise-modal" style="z-index: 250;">
       <div class="modal-content" style="max-height: 85vh; overflow-y: auto;">
         <div class="modal-handle"></div>
         <div class="flex items-center justify-between mb-md">
           <div class="modal-title" style="margin-bottom:0; font-size:1.1rem;">✍️ 自由入力で種目を記録</div>
-          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('adhoc-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="color:var(--text-muted);">✕ 戻る</button>
+          <button class="btn btn-ghost btn-sm" onclick="closeModalCustom('custom-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="color:var(--text-muted);">✕ 戻る</button>
         </div>
 
         <div class="input-group mb-sm">
           <label class="input-label text-xs font-bold">種目名 <span style="color:var(--danger)">*</span></label>
-          <input type="text" id="adhoc-name" class="input text-sm" placeholder="例: ダンベルサイドレイズ、チンニング、自重スクワット等" style="font-weight:bold;">
+          <input type="text" id="custom-name" class="input text-sm" placeholder="例: ダンベルサイドレイズ、チンニング、自重スクワット等" style="font-weight:bold;">
         </div>
 
         <div class="flex gap-sm mb-sm">
           <div class="input-group" style="flex:1;">
             <label class="input-label text-xs">部位カテゴリ</label>
-            <select class="input text-xs" id="adhoc-category">
+            <select class="input text-xs" id="custom-category">
               <option value="upper" selected>💪 上半身 (胸・背中・肩)</option>
               <option value="lower">🦵 下半身 (脚・尻)</option>
               <option value="core">🧘 体幹 (腹筋・背筋)</option>
@@ -34,32 +34,32 @@ window.openAdhocExerciseModal = function(targetSessionId = null) {
 
         <!-- セット入力エリア -->
         <div class="text-xs font-bold text-muted mb-xs">📝 セット・負荷の入力</div>
-        <div id="adhoc-sets-container">
-          <div class="set-row adhoc-set-row" data-set="0" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+        <div id="custom-sets-container">
+          <div class="set-row custom-set-row" data-set="0" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
             <div class="set-number" style="font-weight:bold; font-size:0.85rem; width:20px;">1</div>
             <div style="flex:1;">
-              <input type="number" class="input text-xs adhoc-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="20" style="width:100%;">
+              <input type="number" class="input text-xs custom-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="20" style="width:100%;">
             </div>
             <div style="flex:1;">
-              <input type="number" class="input text-xs adhoc-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="10" style="width:100%;">
+              <input type="number" class="input text-xs custom-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="10" style="width:100%;">
             </div>
             <button class="set-delete" onclick="this.parentElement.remove()" style="color:var(--text-muted); padding:4px 8px; border:none; background:none; cursor:pointer;">✕</button>
           </div>
         </div>
 
         <div class="flex items-center gap-sm mt-xs mb-md">
-          <button class="btn btn-secondary btn-sm" onclick="addAdhocSetRow()" style="flex:1; padding:6px 10px; font-size:0.75rem;">＋ セットを追加</button>
+          <button class="btn btn-secondary btn-sm" onclick="addCustomSetRow()" style="flex:1; padding:6px 10px; font-size:0.75rem;">＋ セットを追加</button>
         </div>
 
         <div class="input-group mb-md">
           <label class="input-label text-xs">メモ・シート調整位置（任意）</label>
-          <input type="text" class="input text-xs" id="adhoc-note" placeholder="例: ダンベル各10kg、インクライン30度等">
+          <input type="text" class="input text-xs" id="custom-note" placeholder="例: ダンベル各10kg、インクライン30度等">
         </div>
 
         <!-- 施設マシン一覧への簡単登録オプション -->
         <div class="card mb-md" style="background:var(--bg-secondary); padding:10px 12px; border:1px solid var(--border-color); border-radius:var(--radius-sm);">
           <label class="flex items-center gap-xs" style="cursor:pointer; font-size:0.8rem; font-weight:bold;">
-            <input type="checkbox" id="adhoc-save-to-facility" checked style="width:16px; height:16px; accent-color:var(--accent);">
+            <input type="checkbox" id="custom-save-to-facility" checked style="width:16px; height:16px; accent-color:var(--accent);">
             <span>この種目を施設のマシン一覧にも追加する</span>
           </label>
           <p class="text-xs text-muted mt-xs" style="margin:0; font-size:0.7rem; line-height:1.4;">
@@ -68,8 +68,8 @@ window.openAdhocExerciseModal = function(targetSessionId = null) {
         </div>
 
         <div class="flex gap-sm">
-          <button class="btn btn-secondary" onclick="closeModalCustom('adhoc-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="flex:1;">キャンセル</button>
-          <button class="btn btn-primary" onclick="saveAdhocExercise(${targetSessionId || 'null'})" style="flex:2; font-weight:bold;">OK (記録して保存) 💪</button>
+          <button class="btn btn-secondary" onclick="closeModalCustom('custom-exercise-modal'); if(${targetSessionId ? 'true' : 'false'}) { showPastSessionMachineSelect(${targetSessionId}); } else { showMachineSelect(); }" style="flex:1;">キャンセル</button>
+          <button class="btn btn-primary" onclick="saveCustomExercise(${targetSessionId || 'null'})" style="flex:2; font-weight:bold;">OK (記録して保存) 💪</button>
         </div>
       </div>
     </div>
@@ -78,28 +78,28 @@ window.openAdhocExerciseModal = function(targetSessionId = null) {
   document.body.insertAdjacentHTML('beforeend', modalHtml);
 };
 
-window.addAdhocSetRow = function() {
-  const container = document.getElementById('adhoc-sets-container');
+window.addCustomSetRow = function() {
+  const container = document.getElementById('custom-sets-container');
   if (!container) return;
-  const rows = container.querySelectorAll('.adhoc-set-row');
+  const rows = container.querySelectorAll('.custom-set-row');
   const nextIdx = rows.length;
   
   let prevWeight = '20';
   let prevReps = '10';
   if (rows.length > 0) {
     const lastRow = rows[rows.length - 1];
-    prevWeight = lastRow.querySelector('.adhoc-weight')?.value || prevWeight;
-    prevReps = lastRow.querySelector('.adhoc-reps')?.value || prevReps;
+    prevWeight = lastRow.querySelector('.custom-weight')?.value || prevWeight;
+    prevReps = lastRow.querySelector('.custom-reps')?.value || prevReps;
   }
 
   const rowHtml = `
-    <div class="set-row adhoc-set-row" data-set="${nextIdx}" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
+    <div class="set-row custom-set-row" data-set="${nextIdx}" style="display:flex; gap:8px; align-items:center; margin-bottom:6px;">
       <div class="set-number" style="font-weight:bold; font-size:0.85rem; width:20px;">${nextIdx + 1}</div>
       <div style="flex:1;">
-        <input type="number" class="input text-xs adhoc-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="${prevWeight}" style="width:100%;">
+        <input type="number" class="input text-xs custom-weight" placeholder="重量 kg" step="0.5" min="0" inputmode="decimal" value="${prevWeight}" style="width:100%;">
       </div>
       <div style="flex:1;">
-        <input type="number" class="input text-xs adhoc-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="${prevReps}" style="width:100%;">
+        <input type="number" class="input text-xs custom-reps" placeholder="回数" step="1" min="1" inputmode="numeric" value="${prevReps}" style="width:100%;">
       </div>
       <button class="set-delete" onclick="this.parentElement.remove()" style="color:var(--text-muted); padding:4px 8px; border:none; background:none; cursor:pointer;">✕</button>
     </div>
@@ -107,8 +107,8 @@ window.addAdhocSetRow = function() {
   container.insertAdjacentHTML('beforeend', rowHtml);
 };
 
-window.saveAdhocExercise = async function(targetSessionId = null) {
-  const nameInp = document.getElementById('adhoc-name');
+window.saveCustomExercise = async function(targetSessionId = null) {
+  const nameInp = document.getElementById('custom-name');
   const name = nameInp ? nameInp.value.trim() : '';
   if (!name) {
     showToast('種目名を入力してください', 'danger');
@@ -116,15 +116,15 @@ window.saveAdhocExercise = async function(targetSessionId = null) {
     return;
   }
 
-  const category = document.getElementById('adhoc-category')?.value || 'upper';
-  const note = document.getElementById('adhoc-note')?.value.trim() || '';
-  const saveToFacility = document.getElementById('adhoc-save-to-facility')?.checked;
+  const category = document.getElementById('custom-category')?.value || 'upper';
+  const note = document.getElementById('custom-note')?.value.trim() || '';
+  const saveToFacility = document.getElementById('custom-save-to-facility')?.checked;
 
-  const rows = document.querySelectorAll('#adhoc-sets-container .adhoc-set-row');
+  const rows = document.querySelectorAll('#custom-sets-container .custom-set-row');
   const setsData = [];
   rows.forEach(r => {
-    const w = parseFloat(r.querySelector('.adhoc-weight')?.value) || 0;
-    const rep = parseInt(r.querySelector('.adhoc-reps')?.value, 10) || 10;
+    const w = parseFloat(r.querySelector('.custom-weight')?.value) || 0;
+    const rep = parseInt(r.querySelector('.custom-reps')?.value, 10) || 10;
     setsData.push({ weight: w, reps: rep });
   });
 
@@ -189,7 +189,7 @@ window.saveAdhocExercise = async function(targetSessionId = null) {
 
   clearLocalIntervalTimer();
   clearExerciseDraft();
-  closeModalCustom('adhoc-exercise-modal');
+  closeModalCustom('custom-exercise-modal');
 
   showToast(`${name} を記録しました！💪${saveToFacility ? ' (マシン一覧にも登録)' : ''}`, 'success');
 
@@ -1395,8 +1395,8 @@ async function showMachineSelect() {
     ` : ''}
 
     <div class="mb-sm">
-      <button class="btn btn-secondary btn-sm btn-block" onclick="openAdhocExerciseModal()" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
-        <span>✍️</span> <span>自由入力で種目・負荷を記録（アドホック）</span>
+      <button class="btn btn-secondary btn-sm btn-block" onclick="openCustomExerciseModal()" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>✍️</span> <span>自由入力で種目・負荷を記録（カスタム種目）</span>
       </button>
     </div>
 
@@ -1852,28 +1852,31 @@ async function openExerciseInput(machineId, editExerciseId = null, targetSession
     lastData = draft.data;
     lastNote = draft.note || '';
     if (draft.targetSessionId) resolvedSessionId = draft.targetSessionId;
-  } else if (!isRestore) {
-    // 最小化バーからの復元ではなく通常画面から開いた場合は古い下書きを破棄
-    clearExerciseDraft();
-  } else if (editExerciseId) {
-    const db = new Dexie('TrainingRoomApp');
-    db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
-    const ex = await db.exercises.get(editExerciseId);
-    if (ex) {
-      lastData = ex.data;
-      lastNote = ex.note || '';
-      resolvedSessionId = ex.sessionId;
-    }
   } else {
-    const setting = await getMachineSetting(machineId);
-    if (setting && setting.data) {
-      lastData = setting.data;
-      lastNote = setting.note || '';
+    if (!isRestore) {
+      // 最小化バーからの復元ではなく通常画面から開いた場合は古い下書きを破棄
+      clearExerciseDraft();
+    }
+    if (editExerciseId) {
+      const db = new Dexie('TrainingRoomApp');
+      db.version(1).stores({ exercises: '++id, sessionId, machineId, category, type, createdAt' });
+      const ex = await db.exercises.get(editExerciseId);
+      if (ex) {
+        lastData = ex.data;
+        lastNote = ex.note || '';
+        resolvedSessionId = ex.sessionId;
+      }
     } else {
-      const pastExercises = await getExercisesByMachine(machineId);
-      if (pastExercises.length > 0) {
-        lastData = pastExercises[0].data;
-        lastNote = pastExercises[0].note || '';
+      const setting = await getMachineSetting(machineId);
+      if (setting && setting.data) {
+        lastData = setting.data;
+        lastNote = setting.note || '';
+      } else {
+        const pastExercises = await getExercisesByMachine(machineId);
+        if (pastExercises && pastExercises.length > 0) {
+          lastData = pastExercises[0].data;
+          lastNote = pastExercises[0].note || '';
+        }
       }
     }
   }
@@ -2493,8 +2496,8 @@ async function showPastSessionMachineSelect(sessionId) {
     </div>
     
     <div class="mb-sm">
-      <button class="btn btn-secondary btn-sm btn-block" onclick="openAdhocExerciseModal(${sessionId})" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
-        <span>✍️</span> <span>自由入力で種目・負荷を記録（アドホック）</span>
+      <button class="btn btn-secondary btn-sm btn-block" onclick="openCustomExerciseModal(${sessionId})" style="padding:9px 12px; font-weight:bold; border: 1.5px dashed var(--accent); color:var(--accent); background:var(--bg-elevated); display:flex; align-items:center; justify-content:center; gap:6px;">
+        <span>✍️</span> <span>自由入力で種目・負荷を記録（カスタム種目）</span>
       </button>
     </div>
 
@@ -4236,7 +4239,7 @@ function renderSettings(main) {
       </div>
 
       <div class="text-center mt-lg">
-        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v97)</div>
+        <div class="text-xs text-muted">トレーニング記録アプリ v2.0 (v98)</div>
         <div class="text-xs text-muted mt-sm">データはこのデバイスにのみ保存されます</div>
         <div style="margin-top:16px;">
           <button class="btn btn-ghost btn-sm" onclick="forceUpdateApp()" style="font-size:0.65rem; color:var(--text-muted); border:1px solid var(--border-color); padding:4px 8px; border-radius:var(--radius-sm); width: 80%; max-width: 250px;">🔄 アプリの更新を強制反映する</button>
